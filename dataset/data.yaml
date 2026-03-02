@@ -1,0 +1,49 @@
+# =============================================================================
+# dataset/data.yaml — YOLOv8 Dataset Configuration (Production Version)
+# =============================================================================
+# PURPOSE:
+#   This file tells YOLOv8 WHERE the data is and WHAT the classes are.
+#   It is the single most important config file for training.
+#   A wrong path here = training crashes.  A wrong class here = garbage model.
+#
+# FIELD EXPLANATIONS:
+# ─────────────────────────────────────────────────────────────────────────────
+#   path:   Absolute or relative root of the dataset.  All other paths
+#           (train, val, test) are resolved relative to this.
+#
+#   train:  Path to training images (relative to `path`).
+#           YOLOv8 automatically looks for labels in a sibling `labels/`
+#           directory — you do NOT specify the labels path explicitly.
+#
+#   val:    Path to validation images.  Used after every epoch to measure
+#           mAP and decide early stopping / best checkpoint.
+#
+#   test:   Path to held-out test images.  Used ONLY for final evaluation
+#           after training is complete.  Never seen during training.
+#
+#   nc:     Number of classes.  Must match the highest class_id + 1 in
+#           your label files.  For ANPR: 1 class (plate-number, id=0).
+#
+#   names:  Ordered list of class names.  Index 0 = class_id 0, etc.
+#           These appear in prediction output and confusion matrix.
+#
+# WHY WE RECREATED THIS FILE:
+#   The original Roboflow data.yaml used relative paths like `../train/images`
+#   which only work if you `cd` into the dataset folder first.  Our version
+#   uses `path:` as the root so training works from any working directory.
+# =============================================================================
+
+# Root directory of the dataset (absolute path is safest)
+path: ../Automatic Plate Number Recognition.v4i.yolov8
+
+# Image directories (relative to `path`)
+train: train/images
+val:   valid/images
+test:  test/images
+
+# Number of classes
+nc: 1
+
+# Class names — order must match class IDs in label files
+names:
+  0: plate-number

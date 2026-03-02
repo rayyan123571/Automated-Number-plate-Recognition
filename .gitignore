@@ -1,0 +1,59 @@
+# =============================================================================
+# .gitignore — Files excluded from version control
+# =============================================================================
+
+# ── Python ───────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+dist/
+build/
+*.egg
+
+# ── Virtual Environment ─────────────────────────────────────────────────────
+venv/
+.venv/
+env/
+
+# ── Environment Variables (SECRETS) ─────────────────────────────────────────
+.env
+
+# ── IDE / Editor ─────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ── Logs ─────────────────────────────────────────────────────────────────────
+logs/
+*.log
+
+# ── AI Model Weights (large binary files) ───────────────────────────────────
+*.pt
+*.onnx
+*.engine
+models/
+
+# ── Training Runs & Metrics (generated, large) ──────────────────────────────
+runs/
+metrics/
+
+# ── Database (generated at runtime) ─────────────────────────────────────────
+*.db
+*.db-shm
+*.db-wal
+
+# ── OS ───────────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+
+# ── Dataset images (large, download separately) ─────────────────────────────
+Automatic Plate Number Recognition.v4i.yolov8/train/images/
+Automatic Plate Number Recognition.v4i.yolov8/valid/images/
+Automatic Plate Number Recognition.v4i.yolov8/test/images/
+
+# ── Frontend build artifacts ─────────────────────────────────────────────────
+anpr-frontend/.next/
+anpr-frontend/node_modules/
