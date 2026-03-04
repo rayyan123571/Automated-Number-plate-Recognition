@@ -78,10 +78,12 @@ export function useWebSocket() {
     intentionalClose.current = false;
     setState("connecting");
 
+    console.log("[WS] Connecting to:", WS_URL);
     const ws = new WebSocket(WS_URL);
     wsRef.current = ws;
 
     ws.onopen = () => {
+      console.log("[WS] Connected successfully!");
       setState("connected");
       reconnectAttempt.current = 0;
 
@@ -120,7 +122,8 @@ export function useWebSocket() {
       }
     };
 
-    ws.onclose = () => {
+    ws.onclose = (event) => {
+      console.log("[WS] Connection closed. Code:", event.code, "Reason:", event.reason, "Intentional:", intentionalClose.current);
       clearTimers();
 
       if (intentionalClose.current) {
@@ -139,7 +142,8 @@ export function useWebSocket() {
       reconnectTimer.current = setTimeout(connect, delay);
     };
 
-    ws.onerror = () => {
+    ws.onerror = (event) => {
+      console.error("[WS] Error occurred:", event);
       setState("error");
       // onclose will fire after onerror and handle reconnect
     };
@@ -167,6 +171,8 @@ export function useWebSocket() {
   const sendFrame = useCallback((base64Data: string) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       wsRef.current.send(base64Data);
+    } else {
+      console.log("[WS] Cannot send frame. WS state:", wsRef.current?.readyState, "Expected:", WebSocket.OPEN);
     }
   }, []);
 

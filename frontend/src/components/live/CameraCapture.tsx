@@ -42,6 +42,8 @@ interface CameraCaptureProps {
   onFrame?: (base64: string) => void;
   /** Whether capture loop is running. */
   isCapturing: boolean;
+  /** Called when camera/video source becomes ready (so parent can auto-start). */
+  onSourceReady?: () => void;
   /** Width of the video element (CSS). */
   width?: number;
   /** Additional class names. */
@@ -53,7 +55,7 @@ interface CameraCaptureProps {
 // ---------------------------------------------------------------------------
 export const CameraCapture = forwardRef<CameraCaptureRef, CameraCaptureProps>(
   function CameraCapture(
-    { fps = 1, onFrame, isCapturing, width = 640, className },
+    { fps = 1, onFrame, isCapturing, onSourceReady, width = 640, className },
     ref
   ) {
     const videoRef = useRef<HTMLVideoElement>(null);
@@ -138,6 +140,7 @@ export const CameraCapture = forwardRef<CameraCaptureRef, CameraCaptureProps>(
         }
         setSource("camera");
         setVideoReady(true);
+        onSourceReady?.();
       } catch (err) {
         const msg =
           err instanceof DOMException && err.name === "NotAllowedError"
@@ -145,7 +148,14 @@ export const CameraCapture = forwardRef<CameraCaptureRef, CameraCaptureProps>(
             : "Could not access camera. Check if another app is using it.";
         setError(msg);
       }
-    }, []);
+    }, [onSourceReady]);
+
+    // ── Auto-start camera when capturing begins ───────────────────────
+    useEffect(() => {
+      if (isCapturing && !source && !error) {
+        startCamera();
+      }
+    }, [isCapturing, source, error, startCamera]);
 
     // ── Load video file ───────────────────────────────────────────────
     const loadVideo = useCallback((file: File) => {
@@ -166,7 +176,8 @@ export const CameraCapture = forwardRef<CameraCaptureRef, CameraCaptureProps>(
       }
       setSource("video");
       setVideoReady(true);
-    }, []);
+      onSourceReady?.();
+    }, [onSourceReady]);
 
     // ── Stop all streams ──────────────────────────────────────────────
     const stopStream = useCallback(() => {

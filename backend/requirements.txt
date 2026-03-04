@@ -24,14 +24,11 @@ easyocr>=1.7.1                  # License plate text recognition (OCR)
 # ── File Upload ──────────────────────────────────────────────────────────────
 python-multipart>=0.0.9         # Required by FastAPI for file uploads
 
+# ── Database ─────────────────────────────────────────────────────────────────
+sqlalchemy>=2.0.0               # ORM for database operations
+
+# ── WebSocket support (required by uvicorn for ws:// connections) ────────────
+websockets>=13.0
+
 # ── Training & Export ────────────────────────────────────────────────────────
 pyyaml>=6.0                     # YAML config parsing
-onnx>=1.16.0                    # ONNX model format support
-onnxruntime>=1.17.0             # ONNX inference runtime (CPU)
-onnxslim>=0.1.0                 # ONNX graph simplification
-
-# ── Future (uncomment when needed) ───────────────────────────────────────────
-# easyocr>=1.7.1                # OCR — Step 2
-# asyncpg>=0.29.0               # PostgreSQL async driver
-# sqlalchemy[asyncio]>=2.0.0    # ORM
-# alembic>=1.13.0               # DB migrations

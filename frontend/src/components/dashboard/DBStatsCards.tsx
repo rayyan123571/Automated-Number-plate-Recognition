@@ -109,7 +109,8 @@ export function DBStatsCards({ records, isLoading }: DBStatsCardsProps) {
     const avgProcessing =
       withTime.length > 0
         ? withTime.reduce((sum, r) => sum + (r.processing_time ?? 0), 0) /
-          withTime.length
+          withTime.length /
+          1000 // Convert ms → seconds
         : 0;
 
     const highConfidence = records.filter((r) => r.confidence >= 0.8).length;

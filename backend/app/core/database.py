@@ -33,14 +33,23 @@ from typing import Generator
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import Session, sessionmaker, declarative_base
 
+from app.core.config import settings
+
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# Database URL — SQLite file in project root
+# Database URL — from settings (which reads .env / env vars)
 # ---------------------------------------------------------------------------
-# resolve() ensures we get an absolute path regardless of working directory.
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
-DATABASE_URL = f"sqlite:///{_PROJECT_ROOT / 'anpr.db'}"
+
+# If the settings DATABASE_URL is a relative SQLite path, make it absolute
+# relative to the backend project root.
+_settings_url = settings.DATABASE_URL
+if _settings_url.startswith("sqlite:///./"):
+    _relative = _settings_url.replace("sqlite:///./", "")
+    DATABASE_URL = f"sqlite:///{_PROJECT_ROOT / _relative}"
+else:
+    DATABASE_URL = _settings_url
 
 # ---------------------------------------------------------------------------
 # Engine

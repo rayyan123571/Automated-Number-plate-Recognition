@@ -60,7 +60,7 @@ router = APIRouter(prefix="/detections", tags=["Detection History"])
 )
 def list_detections(
     limit: int = Query(
-        default=20, ge=1, le=100, description="Number of records per page."
+        default=20, ge=1, le=500, description="Number of records per page."
     ),
     offset: int = Query(
         default=0, ge=0, description="Number of records to skip."
@@ -125,7 +125,7 @@ def search_detections(
     plate: str = Query(
         ..., min_length=1, max_length=20, description="Plate text to search."
     ),
-    limit: int = Query(default=20, ge=1, le=100),
+    limit: int = Query(default=20, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
 ) -> DetectionListResponse:

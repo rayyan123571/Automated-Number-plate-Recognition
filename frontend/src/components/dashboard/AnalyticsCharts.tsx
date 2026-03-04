@@ -11,7 +11,7 @@
 
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import {
   ResponsiveContainer,
@@ -75,6 +75,14 @@ function ChartTooltip({
 // Component
 // ---------------------------------------------------------------------------
 export function AnalyticsCharts({ records }: AnalyticsChartsProps) {
+  // ── Client-only mount guard ────────────────────────────────────────────
+  // Recharts relies on browser APIs (ResizeObserver, DOM measurements).
+  // Render charts only after the component is mounted on the client.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
   // ── Confidence trend data ─────────────────────────────────────────────
   const confidenceData = useMemo(() => {
     if (records.length === 0) return [];
@@ -118,15 +126,19 @@ export function AnalyticsCharts({ records }: AnalyticsChartsProps) {
       .map(([day, count]) => ({ day, count }));
   }, [records]);
 
-  if (records.length === 0) {
+  if (!mounted || records.length === 0) {
     return (
       <div className="grid gap-6 lg:grid-cols-2">
         {[0, 1].map((i) => (
           <Card key={i}>
             <CardContent className="flex min-h-[280px] items-center justify-center">
-              <p className="text-sm text-neutral-600">
-                Charts will appear after first detection
-              </p>
+              {!mounted ? (
+                <div className="h-6 w-6 animate-spin rounded-full border-2 border-cyan-500 border-t-transparent" />
+              ) : (
+                <p className="text-sm text-neutral-600">
+                  Charts will appear after first detection
+                </p>
+              )}
             </CardContent>
           </Card>
         ))}

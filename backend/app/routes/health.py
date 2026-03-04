@@ -57,3 +57,16 @@ async def health_check() -> HealthResponse:
         model_loaded=detector._model is not None,
         ocr_loaded=ocr_service._reader is not None,
     )
+
+
+@router.get("/debug/routes", include_in_schema=False)
+async def debug_routes():
+    """List all registered routes (temporary debug endpoint)."""
+    from app.main import app as _app
+    routes = []
+    for route in _app.routes:
+        path = getattr(route, "path", "?")
+        name = getattr(route, "name", "?")
+        rtype = type(route).__name__
+        routes.append({"path": path, "name": name, "type": rtype})
+    return {"routes": routes}

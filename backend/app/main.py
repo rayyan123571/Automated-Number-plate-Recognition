@@ -68,9 +68,6 @@ async def lifespan(app: FastAPI):
     logger.info("=" * 60)
 
     # ── Create database tables ───────────────────────────────────────────
-    # SQLite creates the .db file automatically if it doesn't exist.
-    # create_all() is idempotent — it only creates tables that are missing.
-    # In production with PostgreSQL, you'd use Alembic migrations instead.
     try:
         Base.metadata.create_all(bind=engine)
         logger.info("Database tables verified / created (SQLite).")
@@ -82,28 +79,24 @@ async def lifespan(app: FastAPI):
         load_model()
         logger.info("YOLOv8 model is ready for inference.")
     except FileNotFoundError:
-        # Non-fatal — allow the server to start in "degraded" mode
-        # so that /health can still respond (model_loaded=false).
         logger.warning(
             "YOLOv8 model weights not found. "
             "The server will start, but /detect will return 500 "
             "until a valid model is provided."
         )
-    except RuntimeError as exc:
-        logger.error("Critical model loading error: %s", exc)
+    except Exception as exc:
+        logger.error("Model loading error (non-fatal): %s", exc)
 
     # ── Load EasyOCR reader ──────────────────────────────────────────────
-    # EasyOCR downloads language models (~50 MB) on first run.
-    # Loading at startup avoids cold-start delay on the first /detect call.
     try:
         load_ocr_reader(languages=["en"], gpu=False)
         logger.info("EasyOCR reader is ready for text recognition.")
-    except RuntimeError as exc:
-        logger.error("EasyOCR loading error: %s", exc)
-        logger.warning(
-            "OCR will not be available. "
-            "/detect will still return bounding boxes but no plate text."
-        )
+    except Exception as exc:
+        logger.error("EasyOCR loading error (non-fatal): %s", exc)
+
+    logger.info("=" * 60)
+    logger.info("  Application startup complete!")
+    logger.info("=" * 60)
 
     yield  # ← Application is running and serving requests here
 

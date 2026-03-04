@@ -13,6 +13,7 @@
 "use client";
 
 import { useState, useCallback } from "react";
+import dynamic from "next/dynamic";
 import { motion } from "framer-motion";
 import {
   BarChart3,
@@ -25,8 +26,31 @@ import { useQueryClient } from "@tanstack/react-query";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Button } from "@/components/ui/Button";
 import { DBStatsCards } from "@/components/dashboard/DBStatsCards";
-import { AnalyticsCharts } from "@/components/dashboard/AnalyticsCharts";
 import { DetectionTable } from "@/components/dashboard/DetectionTable";
+
+// Dynamic import with SSR disabled — Recharts uses browser APIs (ResizeObserver,
+// window) that break during Next.js server pre-rendering.
+const AnalyticsCharts = dynamic(
+  () =>
+    import("@/components/dashboard/AnalyticsCharts").then((mod) => ({
+      default: mod.AnalyticsCharts,
+    })),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="grid gap-6 lg:grid-cols-2">
+        {[0, 1].map((i) => (
+          <div
+            key={i}
+            className="flex min-h-[280px] items-center justify-center rounded-2xl border border-white/10 bg-white/5"
+          >
+            <div className="h-6 w-6 animate-spin rounded-full border-2 border-cyan-500 border-t-transparent" />
+          </div>
+        ))}
+      </div>
+    ),
+  }
+);
 import {
   useDetections,
   useSearchDetections,

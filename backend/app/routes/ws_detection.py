@@ -181,6 +181,12 @@ async def ws_detect(websocket: WebSocket):
                 await websocket.send_text(json.dumps({
                     "success": False,
                     "error": str(exc),
+                    "num_plates": 0,
+                    "plates": [],
+                    "timing": {"detection_ms": 0, "ocr_ms": 0, "total_ms": 0},
+                    "frame_time_ms": 0,
+                    "image_width": 0,
+                    "image_height": 0,
                     "timestamp": datetime.now(timezone.utc).isoformat(),
                 }))
                 continue
@@ -195,6 +201,12 @@ async def ws_detect(websocket: WebSocket):
                 await websocket.send_text(json.dumps({
                     "success": False,
                     "error": f"Pipeline error: {exc}",
+                    "num_plates": 0,
+                    "plates": [],
+                    "timing": {"detection_ms": 0, "ocr_ms": 0, "total_ms": 0},
+                    "frame_time_ms": 0,
+                    "image_width": 0,
+                    "image_height": 0,
                     "timestamp": datetime.now(timezone.utc).isoformat(),
                 }))
                 continue

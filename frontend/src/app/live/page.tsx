@@ -69,6 +69,7 @@ export default function LivePage() {
 
   // ── Start live detection ────────────────────────────────────────────
   const handleStart = useCallback(() => {
+    console.log("[Live] handleStart called — connecting WS and enabling capture");
     connect();
     setIsCapturing(true);
   }, [connect]);
@@ -80,6 +81,13 @@ export default function LivePage() {
     // Final invalidation so history is up-to-date
     queryClient.invalidateQueries({ queryKey: detectionKeys.all });
   }, [disconnect, queryClient]);
+
+  // ── Auto-start detection when camera/video source becomes ready ─────
+  const handleSourceReady = useCallback(() => {
+    if (!isCapturing) {
+      handleStart();
+    }
+  }, [isCapturing, handleStart]);
 
   const isConnected = state === "connected";
 
@@ -205,7 +213,8 @@ export default function LivePage() {
                   <CameraCapture
                     fps={targetFps}
                     onFrame={handleFrame}
-                    isCapturing={isCapturing && isConnected}
+                    isCapturing={isCapturing}
+                    onSourceReady={handleSourceReady}
                   />
 
                   {/* Bounding box overlay */}
