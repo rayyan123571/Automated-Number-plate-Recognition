@@ -34,6 +34,7 @@ interface SidebarProps {
 
 const navItems = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/security", label: "Security", icon: Shield },
   { href: "/live", label: "Live Detection", icon: Radio },
   { href: "/analytics", label: "Analytics", icon: BarChart3 },
   { href: "/history", label: "History", icon: History },

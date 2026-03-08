@@ -168,23 +168,9 @@ def _process_single_plate(
     """
     Process a single detected plate: crop → preprocess → OCR → clean.
 
-    Handles failures gracefully — if cropping or OCR fails, the plate
-    is still returned with empty text and zero confidence.
-
-    Parameters
-    ----------
-    image : np.ndarray
-        Full original image (BGR).
-    detection : dict
-        Single detection from detector.detect() with keys:
-        bbox, confidence, class_id, class_name.
-    plate_index : int
-        Index for logging purposes.
-
-    Returns
-    -------
-    dict
-        Complete plate result with text, confidences, and bbox.
+    Tries 6 preprocessed variants (binary, binary_otsu, binary_inv,
+    enhanced, sharp, gray) and picks the result with the longest
+    cleaned text, breaking ties by highest confidence.
     """
     bbox = detection["bbox"]
     det_confidence = detection["confidence"]
@@ -193,7 +179,7 @@ def _process_single_plate(
 
     # ── Stage 2: Crop plate from image ───────────────────────────────────
     try:
-        plate_crop = crop_plate_from_image(image, bbox, padding_pct=0.05)
+        plate_crop = crop_plate_from_image(image, bbox, padding_pct=0.12)
     except Exception as exc:
         logger.warning("Plate %d: crop failed — %s", plate_index, exc)
         return _build_plate_result(
@@ -205,9 +191,8 @@ def _process_single_plate(
 
     # ── Stage 3: Preprocess plate for OCR ────────────────────────────────
     try:
-        preprocessed = preprocess_plate(plate_crop)
+        preprocessed = preprocess_plate(plate_crop, debug=True, plate_index=plate_index)
     except ValueError as exc:
-        # Plate crop too small — skip OCR
         logger.warning("Plate %d: preprocessing failed — %s", plate_index, exc)
         return _build_plate_result(
             bbox=bbox,
@@ -217,26 +202,31 @@ def _process_single_plate(
         )
 
     # ── Stage 4: OCR with fallback strategy ─────────────────────────────
-    # Try multiple preprocessed variants and pick the best result.
-    # Order: binary (best for clean plates) → enhanced → gray (fallback).
+    # Try all preprocessed variants and pick the best result.
+    # Order: enhanced first (best for real photos), then binary variants,
+    # then sharp, then gray as fallback.
+    variant_order = ("enhanced", "sharp", "binary", "binary_otsu", "binary_inv", "gray")
     best_ocr = None
-    for variant_name in ("binary", "enhanced", "gray"):
+    best_variant = None
+
+    for variant_name in variant_order:
         variant_img = preprocessed.get(variant_name)
         if variant_img is None:
             continue
 
         ocr_result = ocr_service.read_plate_text(variant_img)
 
-        # Keep the result with the longest cleaned text (more chars = better)
-        # Break ties with higher confidence.
+        logger.info(
+            "Plate %d | variant='%s' | raw='%s' | cleaned='%s' | conf=%.3f",
+            plate_index, variant_name,
+            ocr_result["raw_text"], ocr_result["cleaned_text"],
+            ocr_result["confidence"],
+        )
+
         if ocr_result["cleaned_text"]:
             if best_ocr is None:
                 best_ocr = ocr_result
-                logger.debug(
-                    "Plate %d: '%s' variant gave text='%s' (conf=%.3f)",
-                    plate_index, variant_name,
-                    ocr_result["cleaned_text"], ocr_result["confidence"],
-                )
+                best_variant = variant_name
             elif (
                 len(ocr_result["cleaned_text"]) > len(best_ocr["cleaned_text"])
                 or (
@@ -245,14 +235,10 @@ def _process_single_plate(
                 )
             ):
                 best_ocr = ocr_result
-                logger.debug(
-                    "Plate %d: '%s' variant gave better text='%s' (conf=%.3f)",
-                    plate_index, variant_name,
-                    ocr_result["cleaned_text"], ocr_result["confidence"],
-                )
+                best_variant = variant_name
 
-        # If we got a good result (3+ chars), stop trying other variants.
-        if best_ocr and len(best_ocr["cleaned_text"]) >= 3:
+        # If we got a good result (4+ chars), stop trying other variants.
+        if best_ocr and len(best_ocr["cleaned_text"]) >= 4:
             break
 
     # Use best result or empty fallback
@@ -266,14 +252,13 @@ def _process_single_plate(
 
     plate_text = best_ocr["cleaned_text"]
     ocr_confidence = best_ocr["confidence"]
-
-    # Combined confidence = detection conf × OCR conf
-    # This gives a single metric representing end-to-end reliability.
     combined = round(det_confidence * ocr_confidence, 4) if plate_text else 0.0
 
-    logger.debug(
-        "Plate %d  |  text='%s'  |  det_conf=%.3f  |  ocr_conf=%.3f  |  combined=%.3f",
-        plate_index, plate_text, det_confidence, ocr_confidence, combined,
+    logger.info(
+        "=== PLATE %d RESULT ===  text='%s'  |  best_variant='%s'  |  "
+        "raw='%s'  |  det_conf=%.3f  |  ocr_conf=%.3f  |  combined=%.3f",
+        plate_index, plate_text, best_variant,
+        best_ocr["raw_text"], det_confidence, ocr_confidence, combined,
     )
 
     return _build_plate_result(

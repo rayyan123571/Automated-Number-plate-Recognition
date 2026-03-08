@@ -96,7 +96,13 @@ class Detection(Base):
         default=0,
         comment="Source image height in pixels",
     )
-
+    # ── Location ─────────────────────────────────────────────────────
+    camera_location: str = Column(
+        String(200),
+        nullable=True,
+        default="Gate 1",
+        comment="Camera / gate location identifier",
+    )
     # ── Timing ───────────────────────────────────────────────────────────
     processing_time: float = Column(
         Float,

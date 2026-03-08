@@ -15,6 +15,8 @@ import {
   Zap,
   Hash,
   ChevronRight,
+  ShieldCheck,
+  ShieldAlert,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
@@ -162,6 +164,46 @@ function PlateCard({ plate, index }: { plate: PlateResult; index: number }) {
               {formatConfidence(plate.combined_confidence)}
             </Badge>
           </div>
+
+          {/* ── Access Status Banner ─────────────────────────────── */}
+          {hasText && plate.access_status && (
+            <div
+              className={`mt-3 flex items-center gap-3 rounded-xl border px-4 py-3 ${
+                plate.access_status === "AUTHORIZED"
+                  ? "border-emerald-500/30 bg-emerald-500/10"
+                  : "border-red-500/30 bg-red-500/10"
+              }`}
+            >
+              {plate.access_status === "AUTHORIZED" ? (
+                <ShieldCheck className="h-6 w-6 text-emerald-400" />
+              ) : (
+                <ShieldAlert className="h-6 w-6 text-red-400" />
+              )}
+              <div className="flex-1">
+                <p
+                  className={`text-sm font-bold tracking-wide ${
+                    plate.access_status === "AUTHORIZED"
+                      ? "text-emerald-400"
+                      : "text-red-400"
+                  }`}
+                >
+                  {plate.access_status === "AUTHORIZED" ? "PASSED" : "UNAUTHORIZED"}
+                </p>
+                {plate.alert && (
+                  <p className="text-xs text-neutral-400">{plate.alert}</p>
+                )}
+              </div>
+              <span
+                className={`rounded-full px-3 py-1 text-xs font-bold ${
+                  plate.access_status === "AUTHORIZED"
+                    ? "bg-emerald-500/20 text-emerald-300"
+                    : "bg-red-500/20 text-red-300"
+                }`}
+              >
+                {plate.access_status === "AUTHORIZED" ? "✓ ALLOWED" : "✗ DENIED"}
+              </span>
+            </div>
+          )}
 
           {/* Confidence bars */}
           {hasText && (

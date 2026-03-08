@@ -110,6 +110,21 @@ class DetectionResponse(BaseModel):
 
 # ─── ANPR (Full Pipeline) ────────────────────────────────────────────────────
 
+class AccessCheckResult(BaseModel):
+    """Access-control result for a single plate."""
+
+    plate: str = Field(..., description="Normalized plate number.")
+    access: str = Field(
+        ...,
+        examples=["AUTHORIZED", "UNAUTHORIZED"],
+        description="AUTHORIZED if the plate is in the allow-list, else UNAUTHORIZED.",
+    )
+    alert: str | None = Field(
+        default=None,
+        description="Alert message when the vehicle is unauthorized.",
+    )
+
+
 class PlateResult(BaseModel):
     """A single recognized license plate with text + detection metadata."""
 
@@ -120,6 +135,15 @@ class PlateResult(BaseModel):
             "Final cleaned plate number (uppercase, A-Z and 0-9 only). "
             "Empty string if OCR failed or returned no text."
         ),
+    )
+    access_status: str | None = Field(
+        default=None,
+        examples=["AUTHORIZED", "UNAUTHORIZED"],
+        description="Access control status. None if no text was recognized.",
+    )
+    alert: str | None = Field(
+        default=None,
+        description="Alert message when the vehicle is unauthorized.",
     )
     ocr_raw_text: str = Field(
         default="",

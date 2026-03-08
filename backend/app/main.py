@@ -38,12 +38,15 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
 from app.core.logging_config import setup_logging
 from app.core.database import Base, engine
-from app.routes import detection, detections, health, ws_detection
+from app.routes import detection, detections, health, vehicles, ws_detection, cameras, unauthorized
 from app.services.detector import load_model
 from app.services.ocr_service import load_ocr_reader
 
 # Import ORM models so Base.metadata knows about all tables
 import app.models.detection  # noqa: F401
+import app.models.authorized_vehicle  # noqa: F401
+import app.models.unauthorized_log  # noqa: F401
+import app.models.camera  # noqa: F401
 
 # ---------------------------------------------------------------------------
 # Initialize logging FIRST — before any module emits a log message.
@@ -146,6 +149,9 @@ app.include_router(health.router, prefix="", tags=["Health"])
 app.include_router(detection.router, prefix="", tags=["Detection"])
 app.include_router(detections.router, prefix="", tags=["Detection History"])
 app.include_router(ws_detection.router, prefix="", tags=["WebSocket"])
+app.include_router(vehicles.router, prefix="", tags=["Vehicles"])
+app.include_router(cameras.router, prefix="", tags=["Cameras"])
+app.include_router(unauthorized.router, prefix="", tags=["Unauthorized Logs"])
 
 
 # ---------------------------------------------------------------------------

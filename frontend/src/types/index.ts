@@ -24,6 +24,8 @@ export interface PlateResult {
   bbox: BoundingBox;
   class_id: number;
   class_name: string;
+  access_status?: string | null;
+  alert?: string | null;
 }
 
 /** Per-stage processing time breakdown. */
@@ -81,6 +83,7 @@ export interface DetectionRecord {
   };
   image_width: number;
   image_height: number;
+  camera_location: string | null;
   processing_time: number;
   detected_at: string; // ISO 8601 timestamp
 }
@@ -119,3 +122,54 @@ export interface WSDetectionResult {
 
 /** WebSocket connection state. */
 export type WSConnectionState = "connecting" | "connected" | "disconnected" | "error";
+
+// ─── Access Control / Security Dashboard types ──────────────────────────────
+
+/** Authorized vehicle record. */
+export interface AuthorizedVehicle {
+  id: number;
+  plate_number: string;
+  owner_name: string;
+  vehicle_type: string | null;
+  department: string | null;
+  created_at: string;
+}
+
+/** Payload for adding a new authorized vehicle. */
+export interface VehicleCreatePayload {
+  plate_number: string;
+  owner_name: string;
+  vehicle_type?: string;
+  department?: string;
+}
+
+/** Unauthorized log entry. */
+export interface UnauthorizedLogEntry {
+  id: number;
+  plate_number: string;
+  detected_at: string;
+  location: string | null;
+}
+
+/** Camera record. */
+export interface CameraRecord {
+  id: number;
+  camera_name: string;
+  location: string;
+  ip_address: string | null;
+  created_at: string;
+}
+
+/** Dashboard summary stats. */
+export interface DashboardStats {
+  total_detections: number;
+  authorized_vehicles: number;
+  unauthorized_alerts: number;
+  active_cameras: number;
+}
+
+/** Vehicle access check result. */
+export interface VehicleCheckResult {
+  plate: string;
+  status: "AUTHORIZED" | "UNAUTHORIZED";
+}

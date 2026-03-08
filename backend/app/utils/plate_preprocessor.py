@@ -1,53 +1,14 @@
 # =============================================================================
 # app/utils/plate_preprocessor.py — License Plate Image Preprocessing
 # =============================================================================
-# PURPOSE:
-#   Converts a raw cropped plate image into a clean, high-contrast image
-#   optimized for OCR accuracy.  This is the MOST critical step for good
-#   plate reading — even a perfect OCR engine fails on a blurry, noisy,
-#   low-contrast plate crop.
-#
-# WHY PREPROCESSING IMPROVES OCR:
-# ─────────────────────────────────────────────────────────────────────────
-#   1. GRAYSCALE CONVERSION
-#      OCR engines work on character shapes, not color.  Converting to
-#      grayscale removes color noise (shadows, reflections, colored
-#      backgrounds) and reduces input dimensions from 3-channel to 1.
-#
-#   2. CONTRAST ENHANCEMENT (CLAHE)
-#      CLAHE (Contrast Limited Adaptive Histogram Equalization) enhances
-#      local contrast without over-amplifying noise.  This makes faded
-#      or unevenly lit characters stand out from the plate background.
-#      Critical for night-time / shadow images.
-#
-#   3. NOISE REMOVAL (BILATERAL FILTER)
-#      Bilateral filtering smooths out sensor noise and JPEG artifacts
-#      while preserving the sharp edges of characters.  Unlike Gaussian
-#      blur, it doesn't make text blurry — only backgrounds get smoothed.
-#
-#   4. ADAPTIVE THRESHOLDING
-#      Converts the image to pure black-and-white (binary).  Adaptive
-#      thresholding handles uneven lighting across the plate — the left
-#      side can be brighter than the right, and it still works.
-#      OCR engines perform best on clean binary images.
-#
-#   5. MORPHOLOGICAL OPERATIONS
-#      Opening (erosion → dilation) removes small noise specks.
-#      Closing (dilation → erosion) fills small gaps in characters.
-#      This produces cleaner character contours for OCR.
-#
-#   6. RESIZING
-#      EasyOCR works best on images where characters are 20–50 pixels
-#      tall.  We resize the crop to a standard height while maintaining
-#      aspect ratio, ensuring consistent OCR performance regardless of
-#      the original plate size in the image.
-#
-# ARCHITECTURE DECISION:
-#   Pure utility — no dependencies on services, routes, or config.
-#   Takes a NumPy array in, returns a NumPy array out.  100% testable.
+# Converts a raw cropped plate image into multiple clean, high-contrast
+# variants optimized for OCR accuracy.
 # =============================================================================
 
 import logging
+import os
+import time
+from pathlib import Path
 
 import cv2
 import numpy as np
@@ -57,159 +18,156 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
-# Target height for resized plate crop (pixels).
-# Characters should be roughly 20–50 px tall for optimal EasyOCR performance.
-TARGET_PLATE_HEIGHT: int = 80
-
-# Minimum crop dimensions to consider valid (avoids OCR on noise)
+TARGET_PLATE_HEIGHT: int = 100  # Taller = more detail for OCR
 MIN_CROP_WIDTH: int = 20
 MIN_CROP_HEIGHT: int = 10
+
+# Debug output directory (created lazily)
+DEBUG_DIR: Path = Path(__file__).resolve().parents[2] / "debug_plates"
+
+
+def _ensure_debug_dir() -> Path:
+    """Create debug output directory if it doesn't exist."""
+    DEBUG_DIR.mkdir(parents=True, exist_ok=True)
+    return DEBUG_DIR
 
 
 def preprocess_plate(
     plate_crop: np.ndarray,
     target_height: int = TARGET_PLATE_HEIGHT,
-    debug: bool = False,
+    debug: bool = True,
+    plate_index: int = 0,
 ) -> dict:
     """
-    Full preprocessing pipeline for a cropped license plate image.
+    Full preprocessing pipeline producing multiple OCR-ready variants.
 
     Pipeline:
-        1. Resize to standard height (preserve aspect ratio).
-        2. Convert to grayscale.
-        3. Apply CLAHE for contrast enhancement.
-        4. Bilateral filter for noise reduction.
-        5. Adaptive thresholding to create binary image.
-        6. Morphological cleanup (open + close).
+        1. Resize to standard height (preserve aspect ratio)
+        2. Convert to grayscale
+        3. Gaussian blur to reduce noise
+        4. CLAHE for contrast enhancement
+        5. Sharpening via unsharp mask
+        6. Bilateral filter for edge-preserving denoising
+        7. Adaptive threshold (Gaussian) → binary
+        8. Otsu threshold → binary_otsu
+        9. Inverted binary for light-on-dark plates
+       10. Morphological cleanup
 
-    Returns a dict with multiple preprocessed variants so the caller
-    can try OCR on each and pick the best result.
-
-    Parameters
-    ----------
-    plate_crop : np.ndarray
-        Cropped plate region in BGR format, shape (H, W, 3).
-    target_height : int
-        Target height for the resized plate crop.
-    debug : bool
-        If True, log intermediate step details.
-
-    Returns
-    -------
-    dict
-        {
-            "binary": np.ndarray,    # Binary (black/white) — best for clean plates
-            "enhanced": np.ndarray,  # CLAHE + bilateral — best for noisy plates
-            "gray": np.ndarray,      # Simple grayscale — fallback
-        }
-
-    Raises
-    ------
-    ValueError
-        If the input crop is too small to process.
+    Returns dict with variants: binary, binary_otsu, binary_inv,
+    enhanced, sharp, gray.
     """
     h, w = plate_crop.shape[:2]
 
-    # ── Validate minimum size ────────────────────────────────────────────
     if w < MIN_CROP_WIDTH or h < MIN_CROP_HEIGHT:
         raise ValueError(
             f"Plate crop too small ({w}×{h}). "
             f"Minimum: {MIN_CROP_WIDTH}×{MIN_CROP_HEIGHT} pixels."
         )
 
-    if debug:
-        logger.debug("Preprocessing plate crop: %d×%d", w, h)
+    logger.info("Preprocessing plate crop: %d×%d (index=%d)", w, h, plate_index)
 
-    # ── Step 1: Resize to standard height ────────────────────────────────
-    # WHY: Ensures consistent character size for OCR regardless of how
-    # far the camera was from the plate.
+    # ── Step 1: Resize ───────────────────────────────────────────────────
     aspect_ratio = w / h
-    new_width = int(target_height * aspect_ratio)
+    new_width = max(int(target_height * aspect_ratio), 100)
     resized = cv2.resize(
         plate_crop,
         (new_width, target_height),
-        interpolation=cv2.INTER_CUBIC,  # Cubic = best for upscaling
+        interpolation=cv2.INTER_CUBIC,
     )
 
-    # ── Step 2: Convert to grayscale ─────────────────────────────────────
-    # WHY: OCR works on shape, not color. Removes color noise.
+    # ── Step 2: Grayscale ────────────────────────────────────────────────
     gray = cv2.cvtColor(resized, cv2.COLOR_BGR2GRAY)
 
-    # ── Step 3: CLAHE contrast enhancement ───────────────────────────────
-    # WHY: Enhances local contrast without amplifying noise globally.
-    # clipLimit=2.0 prevents over-enhancement in already high-contrast areas.
-    # tileGridSize=(8,8) divides image into 8×8 blocks for local adaptation.
-    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
-    enhanced = clahe.apply(gray)
+    # ── Step 3: Gaussian blur (light — just reduce sensor noise) ─────────
+    blurred = cv2.GaussianBlur(gray, (3, 3), 0)
 
-    # ── Step 4: Bilateral filter for noise removal ───────────────────────
-    # WHY: Smooths noise while preserving character edges.
-    # d=11: neighborhood diameter.  sigmaColor=17: color similarity range.
-    # sigmaSpace=17: spatial proximity range.
-    denoised = cv2.bilateralFilter(enhanced, d=11, sigmaColor=17, sigmaSpace=17)
+    # ── Step 4: CLAHE contrast enhancement ───────────────────────────────
+    clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
+    enhanced = clahe.apply(blurred)
 
-    # ── Step 5: Adaptive thresholding ────────────────────────────────────
-    # WHY: Creates binary (black/white) image. Adaptive handles uneven
-    # lighting across the plate (e.g., shadow on one side).
-    # GAUSSIAN method uses weighted sum of neighborhood pixels.
-    # blockSize=19: size of neighborhood area.
-    # C=7: constant subtracted from mean (fine-tunes threshold).
-    binary = cv2.adaptiveThreshold(
+    # ── Step 5: Sharpening via unsharp mask ──────────────────────────────
+    gaussian = cv2.GaussianBlur(enhanced, (0, 0), 3)
+    sharp = cv2.addWeighted(enhanced, 1.5, gaussian, -0.5, 0)
+
+    # ── Step 6: Bilateral filter (edge-preserving denoise) ───────────────
+    denoised = cv2.bilateralFilter(sharp, d=9, sigmaColor=75, sigmaSpace=75)
+
+    # ── Step 7: Adaptive threshold (Gaussian) ────────────────────────────
+    binary_adaptive = cv2.adaptiveThreshold(
         denoised,
         maxValue=255,
         adaptiveMethod=cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
         thresholdType=cv2.THRESH_BINARY,
-        blockSize=19,
-        C=7,
+        blockSize=15,
+        C=5,
     )
 
-    # ── Step 6: Morphological cleanup ────────────────────────────────────
-    # WHY: Opening removes small noise specks. Closing fills gaps in chars.
-    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
+    # ── Step 8: Otsu threshold ───────────────────────────────────────────
+    _, binary_otsu = cv2.threshold(
+        denoised, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU
+    )
 
-    # Opening: erosion → dilation (removes tiny white noise)
-    cleaned = cv2.morphologyEx(binary, cv2.MORPH_OPEN, kernel, iterations=1)
+    # ── Step 9: Inverted binary (for light text on dark plates) ──────────
+    binary_inv = cv2.bitwise_not(binary_adaptive)
 
-    # Closing: dilation → erosion (fills small gaps in characters)
-    cleaned = cv2.morphologyEx(cleaned, cv2.MORPH_CLOSE, kernel, iterations=1)
+    # ── Step 10: Morphological cleanup on each binary variant ────────────
+    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (2, 2))
 
+    cleaned_adaptive = cv2.morphologyEx(binary_adaptive, cv2.MORPH_CLOSE, kernel, iterations=1)
+    cleaned_otsu = cv2.morphologyEx(binary_otsu, cv2.MORPH_CLOSE, kernel, iterations=1)
+    cleaned_inv = cv2.morphologyEx(binary_inv, cv2.MORPH_CLOSE, kernel, iterations=1)
+
+    # ── Debug: save all stages ───────────────────────────────────────────
     if debug:
-        logger.debug(
-            "Preprocessing complete: %d×%d → %d×%d (binary)",
-            w, h, cleaned.shape[1], cleaned.shape[0],
-        )
+        _save_debug_images(plate_index, {
+            "1_crop_original": plate_crop,
+            "2_resized": resized,
+            "3_gray": gray,
+            "4_blurred": blurred,
+            "5_clahe": enhanced,
+            "6_sharp": sharp,
+            "7_denoised": denoised,
+            "8_binary_adaptive": cleaned_adaptive,
+            "9_binary_otsu": cleaned_otsu,
+            "10_binary_inv": cleaned_inv,
+        })
 
     return {
-        "binary": cleaned,
+        "binary": cleaned_adaptive,
+        "binary_otsu": cleaned_otsu,
+        "binary_inv": cleaned_inv,
         "enhanced": denoised,
+        "sharp": sharp,
         "gray": gray,
     }
+
+
+def _save_debug_images(plate_index: int, images: dict) -> None:
+    """Save intermediate preprocessing images for debugging."""
+    try:
+        out_dir = _ensure_debug_dir()
+        ts = int(time.time())
+        for name, img in images.items():
+            filename = f"plate{plate_index}_{ts}_{name}.png"
+            cv2.imwrite(str(out_dir / filename), img)
+        logger.info(
+            "Debug images saved to %s (plate %d, %d images)",
+            out_dir, plate_index, len(images),
+        )
+    except Exception as exc:
+        logger.warning("Failed to save debug images: %s", exc)
 
 
 def crop_plate_from_image(
     image: np.ndarray,
     bbox: dict,
-    padding_pct: float = 0.05,
+    padding_pct: float = 0.12,
 ) -> np.ndarray:
     """
-    Crop a license plate region from the full image using bbox coordinates.
+    Crop a license plate region with generous padding.
 
-    Adds a small padding around the bounding box to ensure characters at
-    the edges of the plate are not clipped.
-
-    Parameters
-    ----------
-    image : np.ndarray
-        Full image in BGR format.
-    bbox : dict
-        Bounding box with keys: x_min, y_min, x_max, y_max (pixel coords).
-    padding_pct : float
-        Padding as a fraction of the bbox dimensions (e.g., 0.05 = 5%).
-
-    Returns
-    -------
-    np.ndarray
-        Cropped plate region in BGR format.
+    Uses 12% padding (up from 5%) to avoid clipping characters at
+    plate edges, which is the #1 cause of OCR misreads on real images.
     """
     img_h, img_w = image.shape[:2]
 
@@ -218,13 +176,11 @@ def crop_plate_from_image(
     x_max = bbox["x_max"]
     y_max = bbox["y_max"]
 
-    # Calculate padding in pixels
     box_w = x_max - x_min
     box_h = y_max - y_min
     pad_x = int(box_w * padding_pct)
     pad_y = int(box_h * padding_pct)
 
-    # Apply padding and clamp to image boundaries
     x1 = max(0, int(x_min) - pad_x)
     y1 = max(0, int(y_min) - pad_y)
     x2 = min(img_w, int(x_max) + pad_x)
@@ -232,9 +188,9 @@ def crop_plate_from_image(
 
     crop = image[y1:y2, x1:x2]
 
-    logger.debug(
-        "Cropped plate: bbox=[%d,%d,%d,%d] → crop=%d×%d",
-        x1, y1, x2, y2, crop.shape[1], crop.shape[0],
+    logger.info(
+        "Cropped plate: bbox=[%d,%d,%d,%d] pad=%d%%→ crop=%d×%d",
+        x1, y1, x2, y2, int(padding_pct * 100), crop.shape[1], crop.shape[0],
     )
 
     return crop

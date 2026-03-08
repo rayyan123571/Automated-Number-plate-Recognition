@@ -22,6 +22,8 @@ from typing import Optional
 from sqlalchemy.orm import Session
 
 from app.models.detection import Detection
+from app.models.authorized_vehicle import AuthorizedVehicle
+from app.models.unauthorized_log import UnauthorizedLog
 from app.schemas.detection_schema import DetectionCreate
 
 logger = logging.getLogger(__name__)
@@ -31,6 +33,7 @@ def save_detections(
     db: Session,
     pipeline_result: dict,
     image_path: Optional[str] = None,
+    location: str = "Main Gate",
 ) -> list[Detection]:
     """
     Persist all plate detections from a single ANPR pipeline run.
@@ -63,8 +66,34 @@ def save_detections(
 
     try:
         for plate in plates:
+            plate_text = plate.get("plate_text", "")
+
+            # ── Access control check ─────────────────────────────────
+            access_status = None
+            alert = None
+            if plate_text:
+                normalized = plate_text.upper().strip()
+                authorized = (
+                    db.query(AuthorizedVehicle)
+                    .filter(AuthorizedVehicle.plate_number == normalized)
+                    .first()
+                )
+                if authorized:
+                    access_status = "AUTHORIZED"
+                    alert = "Access Granted — Vehicle Passed"
+                else:
+                    access_status = "UNAUTHORIZED"
+                    alert = "Unauthorized Vehicle Detected"
+                    db.add(UnauthorizedLog(
+                        plate_number=normalized,
+                        location=location,
+                    ))
+
+            plate["access_status"] = access_status
+            plate["alert"] = alert
+
             detection = Detection(
-                plate_text=plate.get("plate_text", ""),
+                plate_text=plate_text,
                 confidence=plate.get("combined_confidence", 0.0),
                 detection_confidence=plate.get("detection_confidence", 0.0),
                 ocr_confidence=plate.get("ocr_confidence", 0.0),
@@ -72,6 +101,7 @@ def save_detections(
                 bbox=plate.get("bbox", {}),
                 image_width=img_w,
                 image_height=img_h,
+                camera_location=location,
                 processing_time=total_ms,
             )
             db.add(detection)
