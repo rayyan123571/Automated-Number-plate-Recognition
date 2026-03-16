@@ -32,3 +32,5 @@ websockets>=13.0
 
 # ── Training & Export ────────────────────────────────────────────────────────
 pyyaml>=6.0                     # YAML config parsing
+# ── Reporting ─────────────────────────────────────────────────────────────
+python-docx>=0.8.12             # Generate Word (.docx) reports via script
