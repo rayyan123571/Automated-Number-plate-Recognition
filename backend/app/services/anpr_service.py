@@ -46,6 +46,7 @@ import time
 
 import numpy as np
 
+from app.core.config import settings
 from app.services import detector
 from app.services import ocr_service
 from app.utils.plate_preprocessor import crop_plate_from_image, preprocess_plate
@@ -208,6 +209,7 @@ def _process_single_plate(
     variant_order = ("enhanced", "sharp", "binary", "binary_otsu", "binary_inv", "gray")
     best_ocr = None
     best_variant = None
+    best_score = -1.0
 
     for variant_name in variant_order:
         variant_img = preprocessed.get(variant_name)
@@ -223,22 +225,24 @@ def _process_single_plate(
             ocr_result["confidence"],
         )
 
-        if ocr_result["cleaned_text"]:
-            if best_ocr is None:
-                best_ocr = ocr_result
-                best_variant = variant_name
-            elif (
-                len(ocr_result["cleaned_text"]) > len(best_ocr["cleaned_text"])
-                or (
-                    len(ocr_result["cleaned_text"]) == len(best_ocr["cleaned_text"])
-                    and ocr_result["confidence"] > best_ocr["confidence"]
-                )
-            ):
+        cleaned = ocr_result["cleaned_text"]
+        if cleaned:
+            text_len = len(cleaned)
+            in_range = settings.ANPR_MIN_PLATE_CHARS <= text_len <= settings.ANPR_MAX_PLATE_CHARS
+            length_score = 1.0 if in_range else 0.0
+            score = (ocr_result["confidence"] * 0.8) + (length_score * 0.2)
+
+            if score > best_score:
+                best_score = score
                 best_ocr = ocr_result
                 best_variant = variant_name
 
-        # If we got a good result (4+ chars), stop trying other variants.
-        if best_ocr and len(best_ocr["cleaned_text"]) >= 4:
+        # If we already have a strong read, avoid extra OCR calls.
+        if (
+            best_ocr
+            and best_ocr["confidence"] >= 0.60
+            and settings.ANPR_MIN_PLATE_CHARS <= len(best_ocr["cleaned_text"]) <= settings.ANPR_MAX_PLATE_CHARS
+        ):
             break
 
     # Use best result or empty fallback
@@ -253,6 +257,18 @@ def _process_single_plate(
     plate_text = best_ocr["cleaned_text"]
     ocr_confidence = best_ocr["confidence"]
     combined = round(det_confidence * ocr_confidence, 4) if plate_text else 0.0
+
+    if plate_text and _is_low_quality_plate(plate_text, ocr_confidence, combined):
+        logger.info(
+            "Plate %d rejected by quality gate  |  text='%s'  |  len=%d  |  ocr_conf=%.3f  |  combined=%.3f",
+            plate_index,
+            plate_text,
+            len(plate_text),
+            ocr_confidence,
+            combined,
+        )
+        plate_text = ""
+        combined = 0.0
 
     logger.info(
         "=== PLATE %d RESULT ===  text='%s'  |  best_variant='%s'  |  "
@@ -294,6 +310,22 @@ def _build_plate_result(
         "class_id": class_id,
         "class_name": class_name,
     }
+
+
+def _is_low_quality_plate(plate_text: str, ocr_confidence: float, combined_confidence: float) -> bool:
+    """Return True if recognized text is too weak/unreliable to expose as a plate."""
+    length = len(plate_text)
+
+    if length < settings.ANPR_MIN_PLATE_CHARS or length > settings.ANPR_MAX_PLATE_CHARS:
+        return True
+
+    if ocr_confidence < settings.ANPR_MIN_OCR_CONFIDENCE:
+        return True
+
+    if combined_confidence < settings.ANPR_MIN_COMBINED_CONFIDENCE:
+        return True
+
+    return False
 
 
 def _build_error_result(

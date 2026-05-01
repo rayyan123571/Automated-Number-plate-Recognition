@@ -29,7 +29,67 @@ def safe_import_docx() -> Optional[object]:
         import docx  # type: ignore
 
         return docx
-    except ImportError:
+    except ImportError:I’m doing a focused Colab-compatibility audit now on the exact files you named, and I’ll return concrete fix snippets plus a clean split-packaging structure you can use immediately.I’m running a targeted static check for hardcoded Windows paths and quick diagnostics on the three files so the recommendations are evidence-based.
+    
+    I found no real Windows drive paths in those files; I’m doing one stricter regex pass to confirm and then I’ll give you exact fix-ready code blocks.
+    
+    Colab Error Hunt
+    I re-scanned the three target files: train.py, data.yaml, and requirements.txt.
+    
+    No hardcoded Windows drive paths were found in these files.
+    The main Colab risk is not a Windows path, it is dataset path robustness:
+    train.py does not fail early when split folders are missing or empty, which is a common Colab failure mode after moving data to Drive.
+    data.yaml currently depends on a space-heavy folder name and backend-relative layout. It can work on Linux, but it is fragile when you refactor folder locations.
+    requirements.txt is a full web-stack requirements file. It is not ideal for Colab training setup and can cause unnecessary install time and version friction.
+    Exact Code Fixes
+    
+    Update train.py to hard-fail on wrong dataset layout.
+    Add this block near the imports (after existing imports):
+    
+    Then replace the current dataset-path resolution section in main with:
+    
+    Update data.yaml for the refactored Colab package layout.
+    Replace file contents with:
+    
+    Do not use requirements.txt in Colab training.
+    Create a new file named requirements-colab-train.txt for Colab:
+    Refactoring for Colab: Concrete Separation Plan
+    
+    Build this zipped package for Drive upload: Colab_Training_Package.zip
+    Copy from current workspace into this target structure:
+    
+    Exact source paths from your current repo to include:
+    
+    train.py
+    __init__.py
+    __init__.py
+    config.py
+    logging_config.py
+    __init__.py
+    dataset_validator.py
+    training_service.py
+    evaluation_service.py
+    data.yaml after editing
+    Automatic Plate Number Recognition.v4i.yolov8 copied/renamed to data/anpr_dataset
+    Optional: yolov8n.pt if you want zero-download startup
+    Keep this local laptop project as Web_App_Project
+    Files/folders to move out of local web app and keep only in training environment:
+    
+    train.py
+    resume_training.py
+    training_service.py
+    evaluation_service.py
+    dataset_validator.py
+    dataset
+    Automatic Plate Number Recognition.v4i.yolov8
+    runs
+    After Colab training finishes, bring best.pt back into best.pt on the local web app.
+    
+    If you want, I can apply these exact file edits in your workspace now.
+    I can also generate a ready-to-run Colab notebook cell sequence for mounting Drive, installing dependencies, training, and exporting best.pt back to your local project layout.
+    You've used 93% of your session rate limit. Your session rate limit will reset on April 23 at 2:35 PM. Learn More
+    
+    GPT-5.3-Codex • 1x
         return None
 
 
