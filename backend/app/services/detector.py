@@ -81,6 +81,11 @@ def load_model() -> YOLO:
         raise RuntimeError(f"YOLOv8 model loading failed: {exc}") from exc
 
 
+def is_model_loaded() -> bool:
+    """Check if the YOLOv8 model is currently loaded in memory."""
+    return _model is not None
+
+
 def get_model() -> YOLO:
     """
     Return the cached model instance.

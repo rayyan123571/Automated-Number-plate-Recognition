@@ -43,6 +43,11 @@ def load_ocr_reader(languages: list[str] | None = None, gpu: bool = False):
         raise RuntimeError(f"EasyOCR initialization failed: {exc}") from exc
 
 
+def is_ocr_loaded() -> bool:
+    """Check if the EasyOCR reader is currently loaded in memory."""
+    return _reader is not None
+
+
 def get_ocr_reader():
     """Return the cached EasyOCR reader. Raises if not loaded."""
     if _reader is None:

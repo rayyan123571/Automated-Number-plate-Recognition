@@ -49,13 +49,18 @@ async def health_check() -> HealthResponse:
     whether a non-loaded model is acceptable (degraded) or critical.
     """
     logger.debug("Health check requested.")
+    
+    m_loaded = detector.is_model_loaded()
+    o_loaded = ocr_service.is_ocr_loaded()
+    
+    logger.info(f"Health check: model_loaded={m_loaded}, ocr_loaded={o_loaded}")
 
     return HealthResponse(
         status="healthy",
         app_name=settings.APP_NAME,
         version=settings.APP_VERSION,
-        model_loaded=detector._model is not None,
-        ocr_loaded=ocr_service._reader is not None,
+        model_loaded=m_loaded,
+        ocr_loaded=o_loaded,
     )
 
 
