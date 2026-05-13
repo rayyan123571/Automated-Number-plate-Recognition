@@ -181,6 +181,50 @@ class PlateResult(BaseModel):
         examples=["plate-number"],
         description="Human-readable class label.",
     )
+    # ── New Pakistan-specific fields ──────────────────────────────────
+    province: str | None = Field(
+        default=None,
+        description="Detected Pakistani province (Punjab, Sindh, KPK, Balochistan, ICT, AJK, GB).",
+    )
+    city: str | None = Field(
+        default=None,
+        description="Detected city from plate prefix (e.g., Lahore, Karachi, Quetta).",
+    )
+    category: str | None = Field(
+        default=None,
+        examples=["private", "commercial", "government", "diplomatic", "army"],
+        description="Plate category derived from format.",
+    )
+    is_valid_format: bool = Field(
+        default=False,
+        description="True if plate text matches a known Pakistan plate format.",
+    )
+    is_suspicious: bool = Field(
+        default=False,
+        description="True if fake/tampered-plate heuristics flagged this plate.",
+    )
+    tamper_score: float = Field(
+        default=0.0,
+        ge=0.0,
+        le=1.0,
+        description="Suspicion score 0..1 (>= 0.4 = flagged).",
+    )
+    tamper_reasons: list[str] = Field(
+        default_factory=list,
+        description="Why the plate was flagged as suspicious.",
+    )
+    color_class: str | None = Field(
+        default=None,
+        description="Detected background color (white, yellow, green, blue, red).",
+    )
+    track_id: str | None = Field(
+        default=None,
+        description="Tracker ID of this vehicle across frames (for video / WS).",
+    )
+    challan: dict | None = Field(
+        default=None,
+        description="Auto-challan record if a violation was detected, else null.",
+    )
 
 
 class TimingInfo(BaseModel):

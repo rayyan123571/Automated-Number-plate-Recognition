@@ -61,6 +61,18 @@ class Settings(BaseSettings):
     ANPR_MAX_PLATE_CHARS: int = 10
     ANPR_MIN_OCR_CONFIDENCE: float = 0.15      # Lowered from 0.30 to allow blurry plates
     ANPR_MIN_COMBINED_CONFIDENCE: float = 0.10 # Lowered from 0.20 to allow blurry plates
+
+    # ── Accuracy / new features toggles ─────────────────────────────────
+    ANPR_ENABLE_DESKEW: bool = True             # Hough-line based rotation correction
+    ANPR_ENABLE_SUPER_RES: bool = True          # Up-scale small plates 2x before OCR
+    ANPR_ENABLE_DEDUPLICATION: bool = True      # Suppress repeat unauthorized logs
+    ANPR_DEDUP_WINDOW_SECONDS: int = 30
+    ANPR_FAKE_PLATE_CHECK: bool = True
+    ANPR_DEBUG_SAVE_PLATES: bool = False        # Was always-on; now opt-in via env
+
+    # ── Pakistan plate fuzzy match (Levenshtein distance) ───────────────
+    ANPR_AUTHORIZED_FUZZY_MAX_DISTANCE: int = 1  # 0 = exact; 1 tolerates O/0, I/1
+
     # ── Training ─────────────────────────────────────────────────────
     TRAINING_DATA_YAML: str = str(
         Path(__file__).resolve().parents[2] / "dataset" / "data.yaml"

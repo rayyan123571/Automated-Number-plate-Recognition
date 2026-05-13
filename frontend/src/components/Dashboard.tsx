@@ -23,7 +23,7 @@
 
 import { useState, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Upload, ScanLine, Loader2 } from "lucide-react";
+import { Upload, ScanLine, Loader2, Sparkles, MapPin, Receipt, ShieldAlert } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Spinner } from "@/components/ui/Spinner";
 import { ImageUpload } from "@/components/ImageUpload";
@@ -33,6 +33,15 @@ import { StatsCards } from "@/components/StatsCards";
 import { HistoryTable } from "@/components/HistoryTable";
 import { detectPlates } from "@/services/anprService";
 import type { ANPRResponse, HistoryEntry } from "@/types";
+
+function FeaturePill({ icon, label }: { icon: React.ReactNode; label: string }) {
+  return (
+    <span className="inline-flex items-center gap-1.5 rounded-full border border-cyan-500/20 bg-cyan-500/10 px-3 py-1 text-[11px] font-medium text-cyan-300">
+      {icon}
+      {label}
+    </span>
+  );
+}
 
 export function Dashboard() {
   // ── State ──────────────────────────────────────────────────────────────
@@ -104,6 +113,35 @@ export function Dashboard() {
   // ── Render ─────────────────────────────────────────────────────────────
   return (
     <div className="space-y-6">
+      {/* ── Hero header ──────────────────────────────────────────────────── */}
+      <motion.div
+        initial={{ opacity: 0, y: -10 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="relative overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-br from-cyan-500/10 via-blue-600/5 to-transparent p-6 sm:p-8"
+      >
+        <div className="absolute -right-10 -top-10 h-40 w-40 rounded-full bg-cyan-500/10 blur-3xl" />
+        <div className="absolute -bottom-12 -left-10 h-40 w-40 rounded-full bg-blue-600/10 blur-3xl" />
+        <div className="relative">
+          <div className="flex items-center gap-2 text-xs uppercase tracking-widest text-cyan-400">
+            <Sparkles className="h-3.5 w-3.5" />
+            Pakistan-Optimised ANPR
+          </div>
+          <h1 className="mt-2 text-2xl font-bold text-white sm:text-3xl">
+            Detect, identify &amp; flag every plate on Pakistan&apos;s roads
+          </h1>
+          <p className="mt-2 max-w-2xl text-sm text-neutral-400">
+            Upload a vehicle image and our YOLOv8 + EasyOCR pipeline returns the plate
+            text, the issuing province &amp; city, a tamper-check score, and an
+            auto-challan if the vehicle violates a tracked rule.
+          </p>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <FeaturePill icon={<MapPin className="h-3 w-3" />} label="Province + City" />
+            <FeaturePill icon={<ShieldAlert className="h-3 w-3" />} label="Fake / Tampered Detection" />
+            <FeaturePill icon={<Receipt className="h-3 w-3" />} label="Auto-Challan" />
+          </div>
+        </div>
+      </motion.div>
+
       {/* ── Stats Row ───────────────────────────────────────────────────── */}
       <StatsCards history={history} />
 

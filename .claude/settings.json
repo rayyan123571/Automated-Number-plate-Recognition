@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(unzip -l \"Implementation Code.zip\")",
+      "Bash(grep -iE \"\\\\.pt$|\\\\.onnx$|weight|model\")",
+      "Bash(unzip -o \"Implementation Code.zip\" \"backend/models/best.pt\" -d .)",
+      "PowerShell(pip install --quiet fastapi \"uvicorn[standard]\" pydantic pydantic-settings python-multipart sqlalchemy websockets pyyaml 2>&1)",
+      "PowerShell(C:\\\\Users\\\\Faizan\\\\AppData\\\\Local\\\\Programs\\\\Python\\\\Python311\\\\python.exe -m pip install --quiet pydantic-settings sqlalchemy python-multipart pyyaml websockets ultralytics easyocr 2>&1)",
+      "Bash(ps -W)",
+      "Read(//c/Users/Faizan/Desktop/Automated-Number-plate-Recognition/frontend/**)"
+    ]
+  }
+}

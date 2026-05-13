@@ -49,6 +49,8 @@ import numpy as np
 from app.core.config import settings
 from app.services import detector
 from app.services import ocr_service
+from app.services import fake_plate_detector
+from app.services.pakistan_plate_format import parse_plate
 from app.utils.plate_preprocessor import crop_plate_from_image, preprocess_plate
 
 logger = logging.getLogger(__name__)
@@ -192,7 +194,7 @@ def _process_single_plate(
 
     # ── Stage 3: Preprocess plate for OCR ────────────────────────────────
     try:
-        preprocessed = preprocess_plate(plate_crop, debug=True, plate_index=plate_index)
+        preprocessed = preprocess_plate(plate_crop, plate_index=plate_index)
     except ValueError as exc:
         logger.warning("Plate %d: preprocessing failed — %s", plate_index, exc)
         return _build_plate_result(
@@ -277,6 +279,18 @@ def _process_single_plate(
         best_ocr["raw_text"], det_confidence, ocr_confidence, combined,
     )
 
+    # ── Stage 5: Pakistan plate format parsing ───────────────────────
+    plate_info = parse_plate(plate_text) if plate_text else None
+
+    # ── Stage 6: Fake / tampered plate screening ─────────────────────
+    fake_info = {}
+    if settings.ANPR_FAKE_PLATE_CHECK and plate_text:
+        try:
+            fake_info = fake_plate_detector.check_plate(plate_crop, plate_text, plate_info)
+        except Exception as exc:
+            logger.warning("Fake-plate check failed for plate %d: %s", plate_index, exc)
+            fake_info = {}
+
     return _build_plate_result(
         bbox=bbox,
         det_confidence=det_confidence,
@@ -286,6 +300,8 @@ def _process_single_plate(
         ocr_raw_text=best_ocr["raw_text"],
         ocr_confidence=ocr_confidence,
         combined_confidence=combined,
+        plate_info=plate_info,
+        fake_info=fake_info,
     )
 
 
@@ -298,9 +314,11 @@ def _build_plate_result(
     ocr_raw_text: str = "",
     ocr_confidence: float = 0.0,
     combined_confidence: float = 0.0,
+    plate_info=None,
+    fake_info: dict | None = None,
 ) -> dict:
     """Build a standardized plate result dict."""
-    return {
+    result = {
         "plate_text": plate_text,
         "ocr_raw_text": ocr_raw_text,
         "detection_confidence": det_confidence,
@@ -309,7 +327,29 @@ def _build_plate_result(
         "bbox": bbox,
         "class_id": class_id,
         "class_name": class_name,
+        # New Pakistan-specific fields (always present, may be null)
+        "province": None,
+        "city": None,
+        "category": None,
+        "is_valid_format": False,
+        "is_suspicious": False,
+        "tamper_score": 0.0,
+        "tamper_reasons": [],
+        "color_class": None,
+        "track_id": None,
+        "challan": None,
     }
+    if plate_info is not None:
+        result["province"] = plate_info.province
+        result["city"] = plate_info.city
+        result["category"] = plate_info.category
+        result["is_valid_format"] = plate_info.is_valid_format
+    if fake_info:
+        result["is_suspicious"] = fake_info.get("is_suspicious", False)
+        result["tamper_score"] = fake_info.get("tamper_score", 0.0)
+        result["tamper_reasons"] = fake_info.get("reasons", [])
+        result["color_class"] = fake_info.get("color_class")
+    return result
 
 
 def _is_low_quality_plate(plate_text: str, ocr_confidence: float, combined_confidence: float) -> bool:

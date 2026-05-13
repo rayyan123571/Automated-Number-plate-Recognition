@@ -111,15 +111,46 @@ def read_plate_text(
             "all_detections": [],
         }
 
-    # Concatenate all detected text fragments
-    raw_texts = []
-    confidences = []
-    for bbox, text, conf in results:
-        raw_texts.append(text)
-        confidences.append(conf)
+    # Sort detected fragments by y-center (top-to-bottom) then x-center (left-to-right)
+    # so multi-line Pakistani plates (Punjab/Sindh) keep correct character order.
+    def _box_center(bbox):
+        ys = [pt[1] for pt in bbox]
+        xs = [pt[0] for pt in bbox]
+        return (sum(ys) / 4.0, sum(xs) / 4.0)
+
+    # Group into lines by y-coordinate (within plate-row tolerance)
+    sorted_results = sorted(results, key=lambda r: _box_center(r[0])[0])
+    if sorted_results:
+        first_y = _box_center(sorted_results[0][0])[0]
+        line_tol = max(15, plate_image.shape[0] // 4)
+        lines: list[list] = [[]]
+        cur_y = first_y
+        for r in sorted_results:
+            cy = _box_center(r[0])[0]
+            if abs(cy - cur_y) > line_tol:
+                lines.append([])
+                cur_y = cy
+            lines[-1].append(r)
+        # within each line, sort left-to-right
+        ordered = []
+        for line in lines:
+            line.sort(key=lambda r: _box_center(r[0])[1])
+            ordered.extend(line)
+    else:
+        ordered = sorted_results
+
+    raw_texts = [t for _, t, _ in ordered]
+    confidences = [c for _, _, c in ordered]
 
     raw_text = " ".join(raw_texts)
-    avg_confidence = sum(confidences) / len(confidences) if confidences else 0.0
+    # Weight confidence by character count so a stray "PUNJAB" word doesn't
+    # boost the score when the actual plate digits are weak.
+    if confidences:
+        weights = [max(1, len(t)) for _, t, _ in ordered]
+        total_w = sum(weights)
+        avg_confidence = sum(c * w for c, w in zip(confidences, weights)) / total_w
+    else:
+        avg_confidence = 0.0
 
     # Clean the text
     cleaned_text = clean_plate_text(raw_text)
@@ -173,29 +204,58 @@ def clean_plate_text(raw_text: str) -> str:
 
 def _fix_common_misreads(text: str) -> str:
     """
-    Apply context-aware corrections for common OCR misreads.
+    Pakistan-plate-aware OCR correction.
 
-    If a character is surrounded by digits → assume ambiguous letters
-    should be digits. If surrounded by letters → digits become letters.
+    Pakistani plates broadly follow: <LETTERS><DIGITS> where the letter
+    prefix is 1-3 characters identifying province/city (e.g., LEA, ICT,
+    BJN, KHI, RIN) and the suffix is 1-4 digits.
+
+    Strategy:
+      - Split text into a leading alphabetic block and trailing numeric block.
+      - In the LETTER zone, digits commonly misread should become letters
+        (0->O, 1->I, 5->S, 8->B).
+      - In the DIGIT zone, letters commonly misread should become digits
+        (O->0, I->1, S->5, B->8, G->6, Z->2, Q->0, D->0).
+      - Only flip when the change makes the resulting block match the
+        expected character class — never blindly transform.
     """
     if len(text) <= 1:
         return text
 
-    letter_to_digit = {"O": "0", "I": "1", "S": "5", "B": "8", "G": "6", "Z": "2"}
-    digit_to_letter = {"0": "O", "1": "I", "5": "S", "8": "B", "6": "G", "2": "Z"}
+    digit_to_letter = {"0": "O", "1": "I", "5": "S", "8": "B", "2": "Z", "6": "G"}
+    letter_to_digit = {
+        "O": "0", "Q": "0", "D": "0",
+        "I": "1", "L": "1",
+        "S": "5",
+        "B": "8",
+        "G": "6",
+        "Z": "2",
+    }
 
-    result = list(text)
+    # Find the split point: end of leading letter block.
+    # Allow at most 4 chars in the prefix (Pakistan max is ~3, +1 tolerance).
+    split = 0
+    for i, ch in enumerate(text[:5]):
+        if ch.isalpha():
+            split = i + 1
+        elif ch.isdigit() and split == 0:
+            # plate starts with digit (e.g., commercial Karachi "7777-A")
+            break
+        else:
+            break
 
-    for i, char in enumerate(result):
-        prev_is_digit = result[i - 1].isdigit() if i > 0 else None
-        next_is_digit = result[i + 1].isdigit() if i < len(result) - 1 else None
+    # Heuristic: if no clear letter prefix, leave text alone (could be
+    # an Urdu plate or an unusual format — better to not corrupt).
+    if split == 0 or split >= len(text):
+        return text
 
-        if prev_is_digit is True and next_is_digit is True:
-            if char in letter_to_digit:
-                result[i] = letter_to_digit[char]
+    prefix = text[:split]
+    suffix = text[split:]
 
-        elif prev_is_digit is False and next_is_digit is False:
-            if char in digit_to_letter:
-                result[i] = digit_to_letter[char]
+    # Fix prefix: digits that should be letters
+    prefix_fixed = "".join(digit_to_letter.get(ch, ch) if ch.isdigit() else ch for ch in prefix)
 
-    return "".join(result)
+    # Fix suffix: letters that should be digits
+    suffix_fixed = "".join(letter_to_digit.get(ch, ch) if ch.isalpha() else ch for ch in suffix)
+
+    return prefix_fixed + suffix_fixed

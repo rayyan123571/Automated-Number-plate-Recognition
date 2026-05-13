@@ -1,32 +1,108 @@
 # =============================================================================
 # app/services/detection_store.py — Detection Persistence Service
 # =============================================================================
-# PURPOSE:
-#   Handles saving ANPR pipeline results to the SQLite database.
-#   Keeps database logic out of the ANPR pipeline (separation of concerns).
-#
-# USAGE:
-#   Called by the detection route AFTER the ANPR pipeline completes:
-#       result = anpr_service.recognize(image)
-#       saved = detection_store.save_detections(db, result)
-#
-# DESIGN:
-#   • One row per detected plate (not per image).
-#   • Proper rollback on any failure — never leaves the DB in a bad state.
-#   • Returns the list of saved Detection ORM objects for response building.
+# Saves ANPR pipeline results to DB and runs:
+#   * Fuzzy access-control match (Levenshtein) to tolerate O/0, I/1 misreads
+#   * 30-second de-duplication window for UnauthorizedLog
+#   * Vehicle-tracker update (auto-challan when violations triggered)
 # =============================================================================
 
+from __future__ import annotations
+
 import logging
+import time
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.models.detection import Detection
 from app.models.authorized_vehicle import AuthorizedVehicle
 from app.models.unauthorized_log import UnauthorizedLog
-from app.schemas.detection_schema import DetectionCreate
+from app.services.vehicle_tracker import tracker
 
 logger = logging.getLogger(__name__)
+
+
+def _levenshtein(a: str, b: str) -> int:
+    """Minimal Levenshtein distance — adequate for short plate strings."""
+    if a == b:
+        return 0
+    if not a:
+        return len(b)
+    if not b:
+        return len(a)
+    prev = list(range(len(b) + 1))
+    for i, ca in enumerate(a, 1):
+        cur = [i] + [0] * len(b)
+        for j, cb in enumerate(b, 1):
+            cost = 0 if ca == cb else 1
+            cur[j] = min(cur[j - 1] + 1, prev[j] + 1, prev[j - 1] + cost)
+        prev = cur
+    return prev[-1]
+
+
+def _normalize_plate(text: str) -> str:
+    """Strip whitespace/hyphens/dots, uppercase."""
+    return "".join(ch for ch in text.upper() if ch.isalnum())
+
+
+def _find_authorized(db: Session, plate_text: str) -> AuthorizedVehicle | None:
+    """Match against authorized list with fuzzy tolerance for OCR errors."""
+    normalized = _normalize_plate(plate_text)
+    if not normalized:
+        return None
+
+    # Try exact match on normalized text first
+    exact = (
+        db.query(AuthorizedVehicle)
+        .filter(AuthorizedVehicle.plate_number == normalized)
+        .first()
+    )
+    if exact:
+        return exact
+
+    # Fuzzy match within configured distance
+    max_dist = settings.ANPR_AUTHORIZED_FUZZY_MAX_DISTANCE
+    if max_dist <= 0:
+        return None
+
+    candidates = db.query(AuthorizedVehicle).all()
+    best, best_d = None, max_dist + 1
+    for vehicle in candidates:
+        d = _levenshtein(normalized, _normalize_plate(vehicle.plate_number))
+        if d < best_d:
+            best, best_d = vehicle, d
+    if best and best_d <= max_dist:
+        logger.info(
+            "Fuzzy auth match: '%s' -> '%s' (distance=%d)",
+            normalized, best.plate_number, best_d,
+        )
+        return best
+    return None
+
+
+def _recent_unauthorized_exists(
+    db: Session,
+    plate_number: str,
+    location: str,
+    window_seconds: int,
+) -> bool:
+    """Return True if same plate was logged at same location within window."""
+    if window_seconds <= 0:
+        return False
+    cutoff = datetime.now(timezone.utc) - timedelta(seconds=window_seconds)
+    recent = (
+        db.query(UnauthorizedLog)
+        .filter(
+            UnauthorizedLog.plate_number == plate_number,
+            UnauthorizedLog.location == location,
+            UnauthorizedLog.detected_at >= cutoff,
+        )
+        .first()
+    )
+    return recent is not None
 
 
 def save_detections(
@@ -35,23 +111,7 @@ def save_detections(
     image_path: Optional[str] = None,
     location: str = "Main Gate",
 ) -> list[Detection]:
-    """
-    Persist all plate detections from a single ANPR pipeline run.
-
-    Parameters
-    ----------
-    db : Session
-        Active SQLAlchemy session (injected via Depends(get_db)).
-    pipeline_result : dict
-        Raw dict returned by ``anpr_service.recognize()``.
-    image_path : str, optional
-        File path if the uploaded image was saved to disk.
-
-    Returns
-    -------
-    list[Detection]
-        List of saved ORM objects (with IDs and timestamps populated).
-    """
+    """Persist all plate detections from a single ANPR pipeline run."""
     plates = pipeline_result.get("plates", [])
     timing = pipeline_result.get("timing", {})
     img_w = pipeline_result.get("image_width", 0)
@@ -59,38 +119,55 @@ def save_detections(
     total_ms = timing.get("total_ms", 0.0)
 
     if not plates:
-        logger.debug("No plates to save — skipping database insert.")
         return []
 
     saved: list[Detection] = []
+    dedup_window = (
+        settings.ANPR_DEDUP_WINDOW_SECONDS
+        if settings.ANPR_ENABLE_DEDUPLICATION
+        else 0
+    )
 
     try:
         for plate in plates:
             plate_text = plate.get("plate_text", "")
 
-            # ── Access control check ─────────────────────────────────
+            # ── Access control (fuzzy) ──────────────────────────────
             access_status = None
             alert = None
             if plate_text:
-                normalized = plate_text.upper().strip()
-                authorized = (
-                    db.query(AuthorizedVehicle)
-                    .filter(AuthorizedVehicle.plate_number == normalized)
-                    .first()
-                )
+                normalized = _normalize_plate(plate_text)
+                authorized = _find_authorized(db, plate_text)
                 if authorized:
                     access_status = "AUTHORIZED"
                     alert = "Access Granted — Vehicle Passed"
                 else:
                     access_status = "UNAUTHORIZED"
                     alert = "Unauthorized Vehicle Detected"
-                    db.add(UnauthorizedLog(
-                        plate_number=normalized,
-                        location=location,
-                    ))
+                    if not _recent_unauthorized_exists(db, normalized, location, dedup_window):
+                        db.add(UnauthorizedLog(
+                            plate_number=normalized,
+                            location=location,
+                        ))
 
             plate["access_status"] = access_status
             plate["alert"] = alert
+
+            # ── Tracker + auto-challan ──────────────────────────────
+            try:
+                bbox = plate.get("bbox", {})
+                track_info = tracker.update(
+                    plate_text=plate_text,
+                    bbox=bbox,
+                    location=location,
+                    access_status=access_status,
+                    is_fake=plate.get("is_suspicious", False),
+                    sharpness=100.0,  # populated from fake_info upstream if available
+                )
+                plate["track_id"] = track_info.get("track_id")
+                plate["challan"] = track_info.get("challan")
+            except Exception as exc:
+                logger.warning("Tracker update failed: %s", exc)
 
             detection = Detection(
                 plate_text=plate_text,
@@ -108,29 +185,17 @@ def save_detections(
             saved.append(detection)
 
         db.commit()
-
-        # Refresh to load DB-generated defaults (id, detected_at)
         for det in saved:
             db.refresh(det)
-
-        plate_texts = [d.plate_text for d in saved if d.plate_text]
-        logger.info(
-            "Saved %d detection(s) to database: %s",
-            len(saved),
-            ", ".join(plate_texts) if plate_texts else "(no text recognized)",
-        )
 
         return saved
 
     except Exception as exc:
         db.rollback()
-        logger.error("Failed to save detections to database: %s", exc)
-        # Don't re-raise — detection should still return results even if
-        # the DB write fails.  Log the error and return an empty list.
+        logger.error("Failed to save detections: %s", exc)
         return []
 
 
 def get_detection_count(db: Session) -> int:
-    """Return total number of detection records."""
     from sqlalchemy import func
     return db.query(func.count(Detection.id)).scalar() or 0

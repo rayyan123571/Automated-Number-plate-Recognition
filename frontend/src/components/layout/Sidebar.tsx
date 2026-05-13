@@ -21,6 +21,8 @@ import {
   X,
   BarChart3,
   Radio,
+  Car,
+  Receipt,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/Badge";
@@ -36,6 +38,7 @@ const navItems = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/security", label: "Security", icon: Shield },
   { href: "/live", label: "Live Detection", icon: Radio },
+  { href: "/tracking", label: "Tracking & Challans", icon: Car },
   { href: "/analytics", label: "Analytics", icon: BarChart3 },
   { href: "/history", label: "History", icon: History },
   { href: "/settings", label: "Settings", icon: Settings },

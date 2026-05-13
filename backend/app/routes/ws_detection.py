@@ -193,7 +193,7 @@ async def ws_detect(websocket: WebSocket):
 
             # ── Run ANPR pipeline (in thread pool to avoid blocking) ─
             try:
-                result = await asyncio.get_event_loop().run_in_executor(
+                result = await asyncio.get_running_loop().run_in_executor(
                     None, anpr_service.recognize, image
                 )
             except Exception as exc:
@@ -237,6 +237,18 @@ async def ws_detect(websocket: WebSocket):
                         "detection_confidence": round(p.get("detection_confidence", 0.0), 4),
                         "ocr_confidence": round(p.get("ocr_confidence", 0.0), 4),
                         "bbox": p.get("bbox", {}),
+                        "access_status": p.get("access_status"),
+                        "alert": p.get("alert"),
+                        "province": p.get("province"),
+                        "city": p.get("city"),
+                        "category": p.get("category"),
+                        "is_valid_format": p.get("is_valid_format", False),
+                        "is_suspicious": p.get("is_suspicious", False),
+                        "tamper_score": p.get("tamper_score", 0.0),
+                        "tamper_reasons": p.get("tamper_reasons", []),
+                        "color_class": p.get("color_class"),
+                        "track_id": p.get("track_id"),
+                        "challan": p.get("challan"),
                     }
                     for p in plates
                 ],

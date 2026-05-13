@@ -17,6 +17,10 @@ import {
   ChevronRight,
   ShieldCheck,
   ShieldAlert,
+  MapPin,
+  AlertTriangle,
+  FileWarning,
+  Receipt,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
@@ -202,6 +206,87 @@ function PlateCard({ plate, index }: { plate: PlateResult; index: number }) {
               >
                 {plate.access_status === "AUTHORIZED" ? "✓ ALLOWED" : "✗ DENIED"}
               </span>
+            </div>
+          )}
+
+          {/* ── Pakistan plate metadata ────────────────────────────── */}
+          {hasText && (plate.province || plate.city || plate.category) && (
+            <div className="mt-3 flex flex-wrap items-center gap-2 rounded-xl border border-blue-500/20 bg-blue-500/5 px-3 py-2">
+              <MapPin className="h-4 w-4 text-blue-400" />
+              <span className="text-xs text-neutral-300">
+                {plate.city && <span className="font-semibold">{plate.city}</span>}
+                {plate.province && <span className="text-neutral-500"> · {plate.province}</span>}
+              </span>
+              {plate.category && (
+                <Badge
+                  variant={
+                    plate.category === "government"
+                      ? "success"
+                      : plate.category === "commercial"
+                        ? "warning"
+                        : plate.category === "diplomatic" || plate.category === "army"
+                          ? "danger"
+                          : "default"
+                  }
+                >
+                  {plate.category.toUpperCase()}
+                </Badge>
+              )}
+              {plate.color_class && (
+                <span className="text-[10px] text-neutral-500">
+                  bg: {plate.color_class}
+                </span>
+              )}
+              {plate.is_valid_format === false && (
+                <Badge variant="warning">UNKNOWN FORMAT</Badge>
+              )}
+            </div>
+          )}
+
+          {/* ── Fake / Tampered plate alert ────────────────────────── */}
+          {hasText && plate.is_suspicious && (
+            <div className="mt-3 flex items-start gap-3 rounded-xl border border-orange-500/30 bg-orange-500/10 px-4 py-3">
+              <AlertTriangle className="h-5 w-5 shrink-0 text-orange-400" />
+              <div className="flex-1">
+                <p className="text-sm font-bold text-orange-300">
+                  ⚠ SUSPECTED FAKE / TAMPERED PLATE
+                </p>
+                <p className="text-[11px] text-neutral-400">
+                  Tamper score: {((plate.tamper_score ?? 0) * 100).toFixed(0)}%
+                </p>
+                {plate.tamper_reasons && plate.tamper_reasons.length > 0 && (
+                  <ul className="mt-1 list-inside list-disc text-[11px] text-neutral-400">
+                    {plate.tamper_reasons.map((r, i) => (
+                      <li key={i}>{r}</li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* ── Auto-Challan card ──────────────────────────────────── */}
+          {plate.challan && (
+            <div className="mt-3 rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-3">
+              <div className="flex items-center gap-2">
+                <Receipt className="h-5 w-5 text-red-400" />
+                <p className="text-sm font-bold text-red-300">
+                  AUTO-CHALLAN #{plate.challan.challan_id}
+                </p>
+                <span className="ml-auto rounded-full bg-red-500/20 px-3 py-0.5 text-xs font-bold text-red-300">
+                  Rs. {plate.challan.total_fine_pkr.toLocaleString()}
+                </span>
+              </div>
+              <ul className="mt-2 space-y-1 text-[11px] text-neutral-300">
+                {plate.challan.violations.map((v, i) => (
+                  <li key={i} className="flex items-center gap-2">
+                    <FileWarning className="h-3 w-3 text-red-400" />
+                    <span className="font-semibold">{v.code}</span>
+                    <span className="text-neutral-500">— {v.description}</span>
+                    <span className="ml-auto text-red-300">Rs.{v.fine_pkr}</span>
+                  </li>
+                ))}
+              </ul>
             </div>
           )}
 

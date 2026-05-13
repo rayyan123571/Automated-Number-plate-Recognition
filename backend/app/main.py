@@ -38,7 +38,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
 from app.core.logging_config import setup_logging
 from app.core.database import Base, engine
-from app.routes import detection, detections, health, vehicles, ws_detection, cameras, unauthorized
+from app.routes import detection, detections, health, vehicles, ws_detection, cameras, unauthorized, tracking
 from app.services.detector import load_model
 from app.services.ocr_service import load_ocr_reader
 
@@ -130,13 +130,20 @@ app = FastAPI(
 #   We default to `*` (all origins) for development and tighten it via
 #   the CORS_ORIGINS env var in production.
 # ---------------------------------------------------------------------------
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=settings.cors_origin_list,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# `allow_credentials=True` is incompatible with `allow_origins=["*"]` —
+# browsers reject the combination. Switch to a regex match when origins is wildcard.
+_cors_kwargs = {
+    "allow_methods": ["*"],
+    "allow_headers": ["*"],
+    "allow_credentials": True,
+}
+if "*" in settings.cors_origin_list:
+    _cors_kwargs["allow_origin_regex"] = ".*"
+    _cors_kwargs["allow_credentials"] = False
+else:
+    _cors_kwargs["allow_origins"] = settings.cors_origin_list
+
+app.add_middleware(CORSMiddleware, **_cors_kwargs)
 
 
 # ---------------------------------------------------------------------------
@@ -152,6 +159,7 @@ app.include_router(ws_detection.router, prefix="", tags=["WebSocket"])
 app.include_router(vehicles.router, prefix="", tags=["Vehicles"])
 app.include_router(cameras.router, prefix="", tags=["Cameras"])
 app.include_router(unauthorized.router, prefix="", tags=["Unauthorized Logs"])
+app.include_router(tracking.router)
 
 
 # ---------------------------------------------------------------------------

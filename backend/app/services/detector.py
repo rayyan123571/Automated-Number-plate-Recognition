@@ -23,19 +23,20 @@
 
 import logging
 from pathlib import Path
+from threading import Lock
 
 import numpy as np
 from ultralytics import YOLO
 
 from app.core.config import settings
 
-# Module-level logger — inherits root config from logging_config.py
 logger = logging.getLogger(__name__)
 
-# ---------------------------------------------------------------------------
-# Module-level model cache (Singleton pattern via module scope)
-# ---------------------------------------------------------------------------
 _model: YOLO | None = None
+# YOLOv8 model.predict is NOT thread-safe across simultaneous calls — it
+# mutates internal state. Serialize calls with a lock to avoid corruption
+# when multiple WebSocket frames hit the executor pool concurrently.
+_predict_lock = Lock()
 
 
 def load_model() -> YOLO:
@@ -132,13 +133,23 @@ def detect(image: np.ndarray) -> list[dict]:
         settings.YOLO_CONFIDENCE_THRESHOLD,
     )
 
-    # ── Run inference ────────────────────────────────────────────────────
-    results = model.predict(
-        source=image,
-        conf=settings.YOLO_CONFIDENCE_THRESHOLD,
-        imgsz=settings.YOLO_IMAGE_SIZE,
-        verbose=False,  # Suppress per-frame Ultralytics output
-    )
+    # ── Run inference (locked: predict is not thread-safe) ──────────────
+    # Auto-pick larger imgsz for high-res input (helps small/distant plates).
+    h, w = image.shape[:2]
+    imgsz = settings.YOLO_IMAGE_SIZE
+    if max(h, w) > 1280:
+        imgsz = 1280  # larger inference resolution recovers tiny plates
+
+    with _predict_lock:
+        results = model.predict(
+            source=image,
+            conf=settings.YOLO_CONFIDENCE_THRESHOLD,
+            imgsz=imgsz,
+            iou=0.45,             # NMS IoU threshold (tighter = fewer dupes)
+            agnostic_nms=True,    # treat all classes same in NMS
+            max_det=20,
+            verbose=False,
+        )
 
     # ── Parse results ────────────────────────────────────────────────────
     detections: list[dict] = []

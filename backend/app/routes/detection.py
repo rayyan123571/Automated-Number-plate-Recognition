@@ -22,6 +22,7 @@
 #   If we swap the AI models, this file stays unchanged.
 # =============================================================================
 
+import asyncio
 import logging
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
@@ -95,9 +96,10 @@ async def detect_plates(
             detail=str(exc),
         ) from exc
 
-    # ── Step 3: Run full ANPR pipeline ───────────────────────────────────
+    # ── Step 3: Run full ANPR pipeline (off the event loop) ─────────────
     try:
-        result = anpr_service.recognize(image)
+        loop = asyncio.get_running_loop()
+        result = await loop.run_in_executor(None, anpr_service.recognize, image)
     except RuntimeError as exc:
         logger.error("ANPR pipeline failed: %s", exc)
         raise HTTPException(

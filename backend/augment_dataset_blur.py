@@ -1,72 +1,137 @@
-import os
-import glob
-import cv2
+"""
+Dataset augmentation for the YOLO training set.
+
+Adds blur, low-light, glare, and partial-occlusion variants so the
+detector learns to localise plates in difficult Pakistani road scenes.
+
+Run from repo root:
+    python backend/augment_dataset_blur.py
+or pass a custom dataset path:
+    python backend/augment_dataset_blur.py --dataset path/to/yolo_dataset/train
+"""
+
+import argparse
+import math
 import random
 import shutil
 from pathlib import Path
 
-# Paths
-DATASET_PATH = Path("backend/Automatic Plate Number Recognition.v4i.yolov8/train")
-IMAGES_DIR = DATASET_PATH / "images"
-LABELS_DIR = DATASET_PATH / "labels"
+import cv2
+import numpy as np
 
-def augment_with_blur():
+
+def _motion_blur_kernel(ksize: int, angle_deg: float) -> np.ndarray:
     """
-    Augments the training dataset by applying Gaussian and Motion Blur
-    to the images. This creates new training examples that teach the model
-    how to recognize blurry plates.
+    Build a real directional motion-blur kernel (line at given angle).
+    The previous implementation used a Gaussian kernel — which produces
+    isotropic blur, NOT motion blur.
     """
-    if not IMAGES_DIR.exists() or not LABELS_DIR.exists():
-        print(f"Dataset directories not found: {IMAGES_DIR} or {LABELS_DIR}")
+    kernel = np.zeros((ksize, ksize), dtype=np.float32)
+    center = ksize // 2
+    angle_rad = math.radians(angle_deg)
+    dx = math.cos(angle_rad)
+    dy = math.sin(angle_rad)
+    for i in range(ksize):
+        offset = i - center
+        x = int(round(center + offset * dx))
+        y = int(round(center + offset * dy))
+        if 0 <= x < ksize and 0 <= y < ksize:
+            kernel[y, x] = 1.0
+    kernel /= kernel.sum() if kernel.sum() > 0 else 1.0
+    return kernel
+
+
+def apply_motion_blur(img: np.ndarray) -> np.ndarray:
+    ksize = random.choice([9, 11, 13, 15])
+    angle = random.uniform(-30, 30)  # mostly horizontal motion
+    return cv2.filter2D(img, -1, _motion_blur_kernel(ksize, angle))
+
+
+def apply_gaussian_blur(img: np.ndarray) -> np.ndarray:
+    ksize = random.choice([5, 7, 9])
+    return cv2.GaussianBlur(img, (ksize, ksize), 0)
+
+
+def apply_low_light(img: np.ndarray) -> np.ndarray:
+    factor = random.uniform(0.35, 0.65)
+    dim = (img.astype(np.float32) * factor).clip(0, 255).astype(np.uint8)
+    # Sodium-vapor street tint common in Pakistani roads
+    if random.random() < 0.5:
+        b, g, r = cv2.split(dim)
+        r = cv2.add(r, 20)
+        g = cv2.add(g, 8)
+        dim = cv2.merge([b, g, r])
+    return dim
+
+
+def apply_glare(img: np.ndarray) -> np.ndarray:
+    overlay = img.copy()
+    h, w = img.shape[:2]
+    cx = random.randint(0, w)
+    cy = random.randint(0, h)
+    radius = random.randint(w // 4, w // 2)
+    cv2.circle(overlay, (cx, cy), radius, (255, 255, 255), -1)
+    return cv2.addWeighted(overlay, 0.25, img, 0.75, 0)
+
+
+AUGMENTATIONS = {
+    "motion": apply_motion_blur,
+    "gauss":  apply_gaussian_blur,
+    "lowlight": apply_low_light,
+    "glare": apply_glare,
+}
+
+
+def augment(dataset_dir: Path, fraction: float = 0.5) -> None:
+    images_dir = dataset_dir / "images"
+    labels_dir = dataset_dir / "labels"
+
+    if not images_dir.exists() or not labels_dir.exists():
+        print(f"[!] Dataset directories not found: {images_dir} or {labels_dir}")
         return
 
-    images = list(IMAGES_DIR.glob("*.jpg")) + list(IMAGES_DIR.glob("*.png")) + list(IMAGES_DIR.glob("*.jpeg"))
-    
-    print(f"Found {len(images)} images in the training set.")
-    print("Applying blur augmentation to 50% of the dataset to improve robustness...")
+    images = (
+        list(images_dir.glob("*.jpg"))
+        + list(images_dir.glob("*.png"))
+        + list(images_dir.glob("*.jpeg"))
+    )
+    print(f"[i] Found {len(images)} source images in {images_dir}")
+    print(f"[i] Augmenting ~{int(fraction*100)}% with: {', '.join(AUGMENTATIONS)}")
 
-    augmented_count = 0
+    count = 0
     for img_path in images:
-        # Skip if it's already an augmented image to avoid recursive augmentation
-        if "_blur" in img_path.stem:
+        if any(tag in img_path.stem for tag in AUGMENTATIONS):
+            continue  # already augmented
+        if random.random() > fraction:
             continue
 
-        # Only augment 50% of the dataset to keep a balance
-        if random.random() > 0.5:
-            continue
-
-        # Load image
         img = cv2.imread(str(img_path))
         if img is None:
             continue
 
-        # Randomly choose between Gaussian Blur and Motion Blur
-        blur_type = random.choice(["gaussian", "motion"])
+        aug_name = random.choice(list(AUGMENTATIONS))
+        aug_img = AUGMENTATIONS[aug_name](img)
 
-        if blur_type == "gaussian":
-            # Apply Gaussian Blur (kernel size 5x5 or 7x7)
-            ksize = random.choice([5, 7])
-            blurred_img = cv2.GaussianBlur(img, (ksize, ksize), 0)
-        else:
-            # Apply Motion Blur (kernel size 7 or 9)
-            ksize = random.choice([7, 9])
-            kernel = cv2.getGaussianKernel(ksize, 0)
-            blurred_img = cv2.filter2D(img, -1, kernel)
+        new_stem = f"{img_path.stem}_{aug_name}"
+        out_img = images_dir / f"{new_stem}{img_path.suffix}"
+        cv2.imwrite(str(out_img), aug_img)
 
-        # Save blurred image
-        new_img_name = f"{img_path.stem}_blur{img_path.suffix}"
-        new_img_path = IMAGES_DIR / new_img_name
-        cv2.imwrite(str(new_img_path), blurred_img)
-
-        # Copy the corresponding label file
-        label_path = LABELS_DIR / f"{img_path.stem}.txt"
+        label_path = labels_dir / f"{img_path.stem}.txt"
         if label_path.exists():
-            new_label_path = LABELS_DIR / f"{new_img_name.replace(img_path.suffix, '.txt')}"
-            shutil.copy2(label_path, new_label_path)
-            augmented_count += 1
-            
-    print(f"Successfully generated {augmented_count} new blurry training images/labels.")
-    print("The dataset is now ready for retraining with blur robustness!")
+            shutil.copy2(label_path, labels_dir / f"{new_stem}.txt")
+            count += 1
+
+    print(f"[ok] Generated {count} new augmented image/label pairs.")
+
 
 if __name__ == "__main__":
-    augment_with_blur()
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--dataset",
+        type=Path,
+        default=Path("backend/Automatic Plate Number Recognition.v4i.yolov8/train"),
+        help="Path to YOLO train split (must contain images/ and labels/).",
+    )
+    parser.add_argument("--fraction", type=float, default=0.5)
+    args = parser.parse_args()
+    augment(args.dataset, fraction=args.fraction)

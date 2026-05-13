@@ -16,7 +16,12 @@
 // =============================================================================
 
 import axios, { AxiosError } from "axios";
-import type { ANPRResponse, HealthResponse, DetectionListResponse } from "@/types";
+import type {
+  ANPRResponse,
+  HealthResponse,
+  DetectionListResponse,
+  VehicleTrack,
+} from "@/types";
 
 // ---------------------------------------------------------------------------
 // Axios Instance — configured once, used everywhere
@@ -114,4 +119,23 @@ export async function searchDetections(
  */
 export async function clearDetections(): Promise<void> {
   await api.delete("/detections");
+}
+
+// ---------------------------------------------------------------------------
+// Tracking / Auto-Challan
+// ---------------------------------------------------------------------------
+
+interface TrackingActiveResponse {
+  success: boolean;
+  count: number;
+  tracks: VehicleTrack[];
+}
+
+export async function getActiveTracks(): Promise<TrackingActiveResponse> {
+  const { data } = await api.get<TrackingActiveResponse>("/tracking/active");
+  return data;
+}
+
+export async function resetTracker(): Promise<void> {
+  await api.post("/tracking/reset");
 }

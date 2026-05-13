@@ -14,6 +14,24 @@ export interface BoundingBox {
   y_max: number;
 }
 
+/** Auto-challan violation (issued by the backend tracker). */
+export interface ChallanViolation {
+  code: string;
+  description: string;
+  fine_pkr: number;
+}
+
+/** Auto-challan record returned by the backend. */
+export interface ChallanRecord {
+  challan_id: string;
+  issued_at: number;
+  track_id: string;
+  plate_text: string;
+  location: string;
+  violations: ChallanViolation[];
+  total_fine_pkr: number;
+}
+
 /** A single recognized license plate with text + detection metadata. */
 export interface PlateResult {
   plate_text: string;
@@ -26,6 +44,29 @@ export interface PlateResult {
   class_name: string;
   access_status?: string | null;
   alert?: string | null;
+  // Pakistan-specific (new)
+  province?: string | null;
+  city?: string | null;
+  category?: string | null;
+  is_valid_format?: boolean;
+  is_suspicious?: boolean;
+  tamper_score?: number;
+  tamper_reasons?: string[];
+  color_class?: string | null;
+  track_id?: string | null;
+  challan?: ChallanRecord | null;
+}
+
+/** Active vehicle track from GET /tracking/active. */
+export interface VehicleTrack {
+  track_id: string;
+  stable_plate: string;
+  first_seen: number;
+  last_seen: number;
+  frame_count: number;
+  unauthorized_count: number;
+  challan_issued: boolean;
+  location: string;
 }
 
 /** Per-stage processing time breakdown. */
