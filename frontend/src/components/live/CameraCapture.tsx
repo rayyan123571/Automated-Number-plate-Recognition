@@ -55,7 +55,7 @@ interface CameraCaptureProps {
 // ---------------------------------------------------------------------------
 export const CameraCapture = forwardRef<CameraCaptureRef, CameraCaptureProps>(
   function CameraCapture(
-    { fps = 1, onFrame, isCapturing, onSourceReady, width = 640, className },
+    { fps = 1, onFrame, isCapturing, onSourceReady, onEnded, width = 640, className },
     ref
   ) {
     const videoRef = useRef<HTMLVideoElement>(null);
@@ -68,8 +68,28 @@ export const CameraCapture = forwardRef<CameraCaptureRef, CameraCaptureProps>(
     const [source, setSource] = useState<"camera" | "video" | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [videoReady, setVideoReady] = useState(false);
+    const [currentTime, setCurrentTime] = useState<string>("");
 
     const captureInterval = 1000 / Math.max(0.5, Math.min(fps, 5));
+
+    // ── Update CCTV timestamp ─────────────────────────────────────────
+    useEffect(() => {
+      if (!isCapturing) return;
+      const updateClock = () => {
+        const now = new Date();
+        const dateStr = now.toISOString().split("T")[0];
+        const timeStr = now.toLocaleTimeString("en-US", {
+          hour12: false,
+          hour: "2-digit",
+          minute: "2-digit",
+          second: "2-digit",
+        });
+        setCurrentTime(`${dateStr} ${timeStr}`);
+      };
+      updateClock();
+      const interval = setInterval(updateClock, 1000);
+      return () => clearInterval(interval);
+    }, [isCapturing]);
 
     // ── Expose captureFrame to parent via ref ─────────────────────────
     useImperativeHandle(ref, () => ({
@@ -82,8 +102,20 @@ export const CameraCapture = forwardRef<CameraCaptureRef, CameraCaptureProps>(
       const canvas = canvasRef.current;
       if (!video || !canvas || video.paused || video.ended) return null;
 
-      canvas.width = video.videoWidth || 640;
-      canvas.height = video.videoHeight || 480;
+      // Scale down to a max width of 1280 to prevent massive base64 payloads
+      // that can crash the WebSocket connection.
+      const MAX_WIDTH = 1280;
+      let targetWidth = video.videoWidth || 640;
+      let targetHeight = video.videoHeight || 480;
+
+      if (targetWidth > MAX_WIDTH) {
+        const ratio = MAX_WIDTH / targetWidth;
+        targetWidth = MAX_WIDTH;
+        targetHeight = Math.floor(targetHeight * ratio);
+      }
+
+      canvas.width = targetWidth;
+      canvas.height = targetHeight;
 
       const ctx = canvas.getContext("2d");
       if (!ctx) return null;
@@ -172,10 +204,9 @@ export const CameraCapture = forwardRef<CameraCaptureRef, CameraCaptureProps>(
       if (videoRef.current) {
         videoRef.current.srcObject = null;
         videoRef.current.src = url;
-        videoRef.current.play();
+        videoRef.current.play().catch(e => console.error("Video play failed:", e));
       }
       setSource("video");
-      setVideoReady(true);
       onSourceReady?.();
     }, [onSourceReady]);
 
@@ -227,8 +258,8 @@ export const CameraCapture = forwardRef<CameraCaptureRef, CameraCaptureProps>(
             style={{ maxWidth: width }}
             muted
             playsInline
-            loop={source === "video"}
             onLoadedData={() => setVideoReady(true)}
+            onEnded={onEnded}
           />
 
           {/* No source placeholder */}
@@ -243,14 +274,23 @@ export const CameraCapture = forwardRef<CameraCaptureRef, CameraCaptureProps>(
             </div>
           )}
 
-          {/* Capture indicator */}
+          {/* CCTV Overlays */}
           {isCapturing && videoReady && (
-            <div className="absolute left-3 top-3 flex items-center gap-2 rounded-lg bg-red-500/90 px-2.5 py-1 backdrop-blur-sm">
-              <div className="h-2 w-2 animate-pulse rounded-full bg-white" />
-              <span className="text-[10px] font-bold uppercase tracking-wider text-white">
-                Live
-              </span>
-            </div>
+            <>
+              {/* REC indicator */}
+              <div className="absolute left-4 top-4 flex items-center gap-2 drop-shadow-md">
+                <div className="h-3 w-3 animate-pulse rounded-full bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.8)]" />
+                <span className="font-mono text-xs font-bold tracking-widest text-red-500">
+                  REC
+                </span>
+              </div>
+              {/* Timestamp */}
+              <div className="absolute right-4 top-4">
+                <span className="font-mono text-sm font-bold tracking-wider text-white drop-shadow-md">
+                  {currentTime}
+                </span>
+              </div>
+            </>
           )}
         </div>
 

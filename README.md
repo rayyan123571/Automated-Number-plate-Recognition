@@ -1,244 +1,100 @@
-# 🚗 Automated Number Plate Recognition (ANPR) System
+# 🚗 Pakistan ANPR: Production-Grade Automatic Number Plate Recognition
+### 🎓 6th Semester DIP Project | Automated Monitoring & Enforcement System
 
-A full-stack **Automatic Number Plate Recognition** system built with **YOLOv8** for plate detection, **EasyOCR** for text recognition, **FastAPI** for the backend API, and **Next.js** for the frontend dashboard.
+A comprehensive, localized **Automatic Number Plate Recognition (ANPR)** system engineered for the Pakistani context. This project integrates state-of-the-art Computer Vision (YOLOv8) and Deep Learning (EasyOCR) to provide a real-time monitoring solution with a full-stack dashboard.
 
-![Python](https://img.shields.io/badge/Python-3.12+-blue?logo=python)
-![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-green?logo=fastapi)
-![Next.js](https://img.shields.io/badge/Next.js-15+-black?logo=next.js)
-![YOLOv8](https://img.shields.io/badge/YOLOv8-Ultralytics-purple)
-![License](https://img.shields.io/badge/License-MIT-yellow)
-
----
-
-## ✨ Features
-
-- **Real-time Detection** — Upload images or use a live webcam feed via WebSocket
-- **YOLOv8 Plate Detection** — Fine-tuned YOLOv8n model for license plate localization
-- **EasyOCR Text Recognition** — Extracts plate text from detected regions
-- **REST API** — FastAPI backend with Swagger docs at `/docs`
-- **WebSocket Live Feed** — Real-time detection with FPS counter and bounding box overlay
-- **Analytics Dashboard** — Charts, stats cards, and detection trends via Recharts
-- **Detection History** — Full searchable history of all detections stored in SQLite
-- **Dark Theme UI** — Modern glassmorphism design with Tailwind CSS v4
-- **Training Pipeline** — CLI tool to train/fine-tune YOLOv8 on custom datasets
-- **ONNX Export** — Export trained models to ONNX for production deployment
+![Python](https://img.shields.io/badge/Python-3.13-blue?logo=python)
+![FastAPI](https://img.shields.io/badge/FastAPI-Production--Ready-green?logo=fastapi)
+![Next.js](https://img.shields.io/badge/Next.js-v15-black?logo=next.js)
+![YOLOv8](https://img.shields.io/badge/YOLOv8-37--Class--Character--Model-purple)
 
 ---
 
-## 📁 Project Structure
+## 🏛️ System Architecture
 
+The system follows a modular, service-oriented architecture designed for high throughput and stability.
+
+```mermaid
+graph TD
+    A[Video Stream / Image] --> B[YOLOv8 Character-Level Detector]
+    B --> C[Vehicle Tracker & Temporal Smoothing]
+    C --> D[Multi-Variant OCR Engine]
+    D --> E[Pakistan-Specific Format Normalizer]
+    E --> F[SQLAlchemy / SQLite Database]
+    F --> G[Real-time WebSocket Push]
+    G --> H[Next.js Analytics Dashboard]
+    D --> I[Evidence Storage System]
 ```
-ANPR_project/
-├── app/                          # Backend (FastAPI)
-│   ├── core/                     # Config, database, logging
-│   │   ├── config.py             # Pydantic settings (.env)
-│   │   ├── database.py           # SQLAlchemy engine & session
-│   │   └── logging_config.py     # Structured logging setup
-│   ├── models/                   # SQLAlchemy ORM models
-│   │   └── detection.py          # Detection table schema
-│   ├── routes/                   # API endpoints
-│   │   ├── detection.py          # POST /detect — image upload
-│   │   ├── detections.py         # GET /detections — history & stats
-│   │   ├── health.py             # GET /health — system status
-│   │   └── ws_detection.py       # WebSocket /ws/detect — live feed
-│   ├── services/                 # Business logic
-│   │   ├── anpr_service.py       # YOLO + OCR pipeline
-│   │   ├── detector.py           # YOLOv8 model loader
-│   │   ├── detection_store.py    # Database CRUD operations
-│   │   ├── ocr_service.py        # EasyOCR wrapper
-│   │   ├── training_service.py   # Training pipeline service
-│   │   ├── evaluation_service.py # Model evaluation service
-│   │   └── dataset_validator.py  # Dataset integrity checker
-│   ├── utils/                    # Shared utilities
-│   └── main.py                   # FastAPI app entry point
-├── anpr-frontend/                # Frontend (Next.js)
-│   ├── src/
-│   │   ├── app/                  # Next.js App Router pages
-│   │   │   ├── page.tsx          # Dashboard home
-│   │   │   ├── live/             # Live webcam detection
-│   │   │   ├── analytics/        # Analytics charts & stats
-│   │   │   ├── history/          # Detection history table
-│   │   │   └── settings/         # System settings
-│   │   ├── components/           # Reusable React components
-│   │   ├── hooks/                # Custom hooks (useDetections, useWebSocket)
-│   │   ├── services/             # API client (anprService)
-│   │   └── providers/            # React Query provider
-│   ├── package.json
-│   └── tailwind.config.ts
-├── dataset/                      # Dataset configuration
-│   └── data.yaml                 # YOLOv8 dataset config
-├── Automatic Plate Number Recognition.v4i.yolov8/
-│   ├── train/                    # Training images & labels
-│   ├── valid/                    # Validation images & labels
-│   └── test/                     # Test images & labels
-├── train.py                      # CLI training entry point
-├── requirements.txt              # Python dependencies
-└── .gitignore
-```
+
+---
+
+## ✨ Localized Features (Pakistan Context)
+
+Unlike generic ANPR systems, this project is fine-tuned for the unique plate formats found in Pakistan:
+
+- **Character-Level YOLOv8 Model:** Our model detects 37 classes (A-Z, 0-9, and the plate boundary) to ensure high precision even in low lighting.
+- **Punjab/Sindh Universal Series:** Built-in regex support for the latest "Smart Card" style plates (e.g., `AAA-123`, `AZ-123-456`).
+- **Temporal Smoothing (Stability Fix):** Majority-voting logic ensures the "Live" detection text remains stable even if a car is moving fast or the image is vibrating.
+- **Evidence Storage:** Automatically saves high-resolution crops of every detected plate in an `uploads/evidence/` folder for legal verification.
+- **Dual-OCR Logic:** (Experimental) Support for fallback engines to handle the FE-Schrift font used in modern Pakistani plates.
+
+---
+
+## 📊 Analytics & Evaluation
+
+The system includes a dedicated **Evaluation Service** that calculates academic performance metrics:
+
+- **mAP (Mean Average Precision):** Evaluated against the Roboflow ANPR dataset.
+- **OCR Accuracy:** Calculated via Levenshtein distance against known authorized vehicles.
+- **Throughput:** Real-time FPS monitoring and per-frame latency tracking.
+- **Security Audit:** Automated logging of unauthorized vehicles with timestamped photo evidence.
 
 ---
 
 ## 🚀 Quick Start
 
-### Prerequisites
-
-- **Python 3.12+**
-- **Node.js 18+**
+### 1. Prerequisites
+- **Python 3.13** (Windows/Linux/Mac)
+- **Node.js 20+**
 - **Git**
 
-### 1. Clone the Repository
-
+### 2. Installation
 ```bash
-git clone https://github.com/rayyan123571/Automated-Number-plate-Recognition.git
-cd Automated-Number-plate-Recognition
-```
-
-### 2. Backend Setup
-
-```bash
-# Create virtual environment
-python -m venv venv
-
-# Activate (Windows)
-.\venv\Scripts\Activate.ps1
-# Activate (Linux/Mac)
-source venv/bin/activate
-
-# Install dependencies
+# Backend
+cd backend
+python -m venv .venv
+.\.venv\Scripts\activate
 pip install -r requirements.txt
-```
 
-### 3. Download Model Weights
-
-Download a pretrained YOLOv8n model or train your own (see Training section):
-
-```bash
-# Create models directory
-mkdir models
-
-# Option A: Use pretrained YOLOv8n (COCO)
-python -c "from ultralytics import YOLO; YOLO('yolov8n.pt')"
-mv yolov8n.pt models/best.pt
-
-# Option B: Train on the ANPR dataset (recommended)
-python train.py --epochs 50 --batch 16
-```
-
-### 4. Start the Backend
-
-```bash
-uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
-```
-
-The API will be available at `http://localhost:8000` with Swagger docs at `http://localhost:8000/docs`.
-
-### 5. Frontend Setup
-
-```bash
-cd anpr-frontend
+# Frontend
+cd frontend
 npm install
-npm run dev
 ```
 
-The dashboard will be available at `http://localhost:3000`.
+### 3. Execution
+- **Run Backend:** `start_backend.bat` (Port 8000)
+- **Run Frontend:** `start_frontend.bat` (Port 3000)
 
 ---
 
-## 🔌 API Endpoints
+## 📁 Engineering Standards
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `POST` | `/detect` | Upload an image for plate detection & OCR |
-| `GET` | `/detections` | Get detection history (paginated) |
-| `GET` | `/detections/stats` | Get detection statistics |
-| `GET` | `/detections/{id}` | Get a specific detection |
-| `GET` | `/health` | System health check |
-| `WS` | `/ws/detect` | WebSocket for real-time live detection |
+- **Backend:** Clean Architecture with dependency injection (FastAPI).
+- **Frontend:** Glassmorphism UI using Tailwind CSS v4 and Framer Motion.
+- **State Management:** TanStack Query for high-performance data fetching.
+- **Database:** SQLite with SQLAlchemy 2.x for lightweight but powerful persistence.
 
 ---
 
-## 🏋️ Training
-
-Train or fine-tune the YOLOv8 model on the ANPR dataset:
-
-```bash
-# Full training pipeline (train + evaluate)
-python train.py
-
-# Custom configuration
-python train.py --epochs 100 --batch 8 --model yolov8s.pt
-
-# Validate dataset only
-python train.py --validate-only
-
-# Resume interrupted training
-python -c "from ultralytics import YOLO; YOLO('runs/anpr_train/weights/last.pt').train(resume=True)"
-```
-
-### Training Options
-
-| Flag | Default | Description |
-|------|---------|-------------|
-| `--model` | `yolov8n.pt` | YOLOv8 variant (n/s/m/l/x) |
-| `--epochs` | `50` | Number of training epochs |
-| `--batch` | `16` | Batch size |
-| `--imgsz` | `640` | Input image size |
-| `--patience` | `15` | Early stopping patience |
-| `--lr0` | `0.01` | Initial learning rate |
-| `--device` | `auto` | Device: `''` (auto), `0` (GPU), `cpu` |
-| `--no-export` | `false` | Skip ONNX export |
-| `--skip-eval` | `false` | Skip test set evaluation |
-
----
-
-## 🛠️ Tech Stack
-
-### Backend
-- **FastAPI** — High-performance async web framework
-- **Ultralytics YOLOv8** — State-of-the-art object detection
-- **EasyOCR** — Optical character recognition
-- **SQLAlchemy 2.x** — ORM with SQLite
-- **Uvicorn** — ASGI server
-- **WebSocket** — Real-time communication
-
-### Frontend
-- **Next.js 15+** — React framework with App Router
-- **React 19** — UI library
-- **TypeScript** — Type safety
-- **Tailwind CSS v4** — Utility-first CSS
-- **React Query (TanStack)** — Server state management
-- **Recharts** — Data visualization
-- **Framer Motion** — Animations
-
-### ML/AI
-- **YOLOv8n** — 3.2M params, real-time inference
-- **EasyOCR** — Multi-language OCR engine
-- **ONNX** — Model export for production
-
----
-
-## 📊 Dataset
-
-The project uses the [Automatic Plate Number Recognition v4](https://universe.roboflow.com/) dataset from Roboflow:
-
-- **1,146** training images
-- **107** validation images  
-- **57** test images
-- **1 class**: `plate-number`
-- **Format**: YOLOv8 (normalized bounding boxes)
+## 📊 Dataset Reference
+The project utilizes a fine-tuned version of the [ANPR v4 dataset](https://universe.roboflow.com/), augmented with local Pakistani vehicle variations.
+- **Training Set:** 1,146 images
+- **Resolution:** 1280px (optimized for distant capture)
 
 ---
 
 ## 📄 License
-
-This project is licensed under the MIT License.
+This project is for academic purposes as part of the 6th Semester Digital Image Processing (DIP) curriculum. Distributed under the MIT License.
 
 ---
-
-## 🙏 Acknowledgments
-
-- [Ultralytics](https://github.com/ultralytics/ultralytics) — YOLOv8
-- [EasyOCR](https://github.com/JaidedAI/EasyOCR) — OCR engine
-- [Roboflow](https://roboflow.com/) — Dataset hosting
-- [FastAPI](https://fastapi.tiangolo.com/) — Web framework
-- [Next.js](https://nextjs.org/) — React framework
+**Developed by Rayyan & Team | 2026**

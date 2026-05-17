@@ -144,7 +144,17 @@ function PlateCard({ plate, index }: { plate: PlateResult; index: number }) {
                 <Hash className="h-4 w-4" />
               </div>
               <div>
-                <p className="text-lg font-bold tracking-widest text-white font-mono">
+                <p
+                  className={`text-2xl font-bold tracking-widest font-mono transition-colors ${
+                    hasText
+                      ? plate.combined_confidence >= 0.7
+                        ? "text-emerald-400 drop-shadow-[0_0_12px_rgba(52,211,153,0.8)]"
+                        : plate.combined_confidence >= 0.4
+                        ? "text-amber-400 drop-shadow-[0_0_12px_rgba(251,191,36,0.8)]"
+                        : "text-red-400 drop-shadow-[0_0_12px_rgba(248,113,113,0.8)]"
+                      : "text-white"
+                  }`}
+                >
                   {hasText ? plate.plate_text : "—"}
                 </p>
                 {plate.ocr_raw_text && plate.ocr_raw_text !== plate.plate_text && (

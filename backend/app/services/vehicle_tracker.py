@@ -31,6 +31,8 @@ from collections import Counter, deque
 from dataclasses import dataclass, field
 from threading import Lock
 
+from app.core.config import settings
+
 logger = logging.getLogger(__name__)
 
 
@@ -51,6 +53,7 @@ class Track:
     unauthorized_count: int = 0
     challan_issued: bool = False
     metadata: dict = field(default_factory=dict)
+    ocr_history: deque = field(default_factory=lambda: deque(maxlen=settings.TEMPORAL_SMOOTHING_FRAMES))
 
     def stable_plate(self) -> str:
         """Return the most common plate text in the voting window."""
@@ -91,6 +94,7 @@ class VehicleTracker:
         access_status: str | None = None,
         is_fake: bool = False,
         sharpness: float = 100.0,
+        ocr_confidence: float = 0.0,
     ) -> dict:
         """
         Associate a single detection with an existing or new track.
@@ -113,6 +117,7 @@ class VehicleTracker:
 
             track.plate_history.append(plate_text or "")
             track.bbox_history.append(bbox)
+            track.ocr_history.append((plate_text or "", ocr_confidence))
             track.last_seen = now
 
             if access_status == "UNAUTHORIZED":
@@ -133,6 +138,42 @@ class VehicleTracker:
                 "unauthorized_count": track.unauthorized_count,
                 "challan": challan,
             }
+
+
+    def get_best_plate_text(self, track_id: str) -> str | None:
+        """
+        Get the most frequently recognized plate text for a given track ID over the temporal smoothing window.
+        
+        Args:
+            track_id (str): The unique identifier for the track.
+            
+        Returns:
+            str | None: The majority-voted plate text, or None if the history is empty. Ties are broken by highest OCR confidence.
+        """
+        with self._lock:
+            track = self._tracks.get(track_id)
+            if not track or not track.ocr_history:
+                return None
+                
+            valid_reads = [(text, conf) for text, conf in track.ocr_history if text]
+            if not valid_reads:
+                return None
+                
+            counts = Counter(text for text, conf in valid_reads)
+            max_count = max(counts.values())
+            candidates = [text for text, count in counts.items() if count == max_count]
+            
+            if len(candidates) == 1:
+                return candidates[0]
+                
+            best_text = candidates[0]
+            best_conf = -1.0
+            for text, conf in valid_reads:
+                if text in candidates and conf > best_conf:
+                    best_conf = conf
+                    best_text = text
+                    
+            return best_text
 
     def active_tracks(self) -> list[dict]:
         """Inspect current tracker state (for /tracks endpoint)."""

@@ -5,7 +5,15 @@
       "Bash(C:/Users/Faizan/AppData/Local/Programs/Python/Python311/python.exe -c \"import easyocr; print\\('easyocr ok'\\)\")",
       "Bash(C:/Users/Faizan/AppData/Local/Programs/Python/Python311/python.exe -c \"import ultralytics; print\\('ultralytics', ultralytics.__version__\\)\")",
       "PowerShell(cd \"c:\\\\Users\\\\Faizan\\\\Desktop\\\\Automated-Number-plate-Recognition\\\\frontend\"; $env:NEXT_PUBLIC_API_URL = \"http://localhost:8000\"; npm run dev 2>&1)",
-      "PowerShell(Get-Process python -ErrorAction SilentlyContinue | Measure-Object -Property WorkingSet64 -Sum | Select-Object Count, @{Name='RAM_MB';Expression={[math]::Round\\($_.Sum/1MB\\)}}; C:\\\\Users\\\\Faizan\\\\AppData\\\\Local\\\\Programs\\\\Python\\\\Python311\\\\python.exe -m pip list 2>$null | Select-String \"torch|easyocr|ultralytics\")"
+      "PowerShell(Get-Process python -ErrorAction SilentlyContinue | Measure-Object -Property WorkingSet64 -Sum | Select-Object Count, @{Name='RAM_MB';Expression={[math]::Round\\($_.Sum/1MB\\)}}; C:\\\\Users\\\\Faizan\\\\AppData\\\\Local\\\\Programs\\\\Python\\\\Python311\\\\python.exe -m pip list 2>$null | Select-String \"torch|easyocr|ultralytics\")",
+      "Bash(python -c \"from app.utils.image_enhancer import enhance_for_detection, enhance_for_ocr; print\\('Import successful!'\\)\")",
+      "Bash(.venv\\\\Scripts\\\\python.exe -c \"import sys; sys.path.insert\\(0, 'backend'\\); from app.utils.image_enhancer import enhance_for_detection, enhance_for_ocr; print\\('Import successful!'\\)\")",
+      "Bash(powershell -Command \"& 'd:\\\\6th Semester\\\\DIP Project V2\\\\Automated-Number-plate-Recognition\\\\.venv\\\\Scripts\\\\python.exe' -c 'import sys; sys.path.insert\\(0, \\\\\"d:\\\\\\\\6th Semester\\\\\\\\DIP Project V2\\\\\\\\Automated-Number-plate-Recognition\\\\\\\\backend\\\\\"\\); from app.utils.image_enhancer import enhance_for_detection, enhance_for_ocr; print\\(\\\\\"Import successful!\\\\\"\\)'\")",
+      "Bash(.venv/Scripts/python test_enhancer.py)",
+      "Bash(.venv/Scripts/python test_anpr.py)",
+      "Bash(.venv/Scripts/python test_enhancement_full.py)",
+      "Bash(.venv/Scripts/python test_pipeline.py)",
+      "Bash(.venv/Scripts/python test_full_pipeline.py)"
     ]
   }
 }

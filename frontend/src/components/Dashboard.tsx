@@ -24,6 +24,7 @@
 import { useState, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Upload, ScanLine, Loader2, Sparkles, MapPin, Receipt, ShieldAlert } from "lucide-react";
+import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Spinner } from "@/components/ui/Spinner";
 import { ImageUpload } from "@/components/ImageUpload";
@@ -75,10 +76,18 @@ export function Dashboard() {
           imageUrl: preview,
         };
         setHistory((prev) => [entry, ...prev]);
+
+        // Toast notification
+        if (response.num_plates > 0) {
+          toast.success(`Detected ${response.num_plates} plate(s) successfully!`);
+        } else {
+          toast.info("Image analyzed, but no plates were detected.");
+        }
+
       } catch (err) {
-        setError(
-          err instanceof Error ? err.message : "An unexpected error occurred"
-        );
+        const msg = err instanceof Error ? err.message : "An unexpected error occurred";
+        setError(msg);
+        toast.error(`Detection Failed: ${msg}`);
       } finally {
         setIsProcessing(false);
       }
@@ -198,10 +207,17 @@ export function Dashboard() {
                           alt="Processing"
                           className="w-full max-h-[500px] object-contain opacity-50"
                         />
+                        {/* Scanning Laser Animation */}
+                        <motion.div
+                          className="absolute left-0 right-0 h-0.5 bg-cyan-400 shadow-[0_0_15px_3px_rgba(34,211,238,0.7)] z-10"
+                          initial={{ top: "0%" }}
+                          animate={{ top: ["0%", "100%", "0%"] }}
+                          transition={{ duration: 2.5, repeat: Infinity, ease: "linear" }}
+                        />
                         <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/40 backdrop-blur-sm">
                           <Spinner size="lg" />
                           <p className="mt-4 text-sm font-medium text-white">
-                            Running ANPR Pipeline...
+                            Fetching number plate...
                           </p>
                           <p className="mt-1 text-xs text-neutral-400">
                             Detection → Crop → OCR → Result

@@ -24,22 +24,22 @@
 import logging
 from pathlib import Path
 from threading import Lock
+from typing import Any
 
 import numpy as np
-from ultralytics import YOLO
 
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
-_model: YOLO | None = None
+_model: Any = None
 # YOLOv8 model.predict is NOT thread-safe across simultaneous calls — it
 # mutates internal state. Serialize calls with a lock to avoid corruption
 # when multiple WebSocket frames hit the executor pool concurrently.
 _predict_lock = Lock()
 
 
-def load_model() -> YOLO:
+def load_model() -> Any:
     """
     Load the YOLOv8 model from disk and cache it in module scope.
 
@@ -71,6 +71,8 @@ def load_model() -> YOLO:
 
     # ── Load model ───────────────────────────────────────────────────────
     try:
+        from ultralytics import YOLO
+
         _model = YOLO(str(model_path))
         logger.info(
             "YOLOv8 model loaded successfully  |  classes=%s",
@@ -87,7 +89,7 @@ def is_model_loaded() -> bool:
     return _model is not None
 
 
-def get_model() -> YOLO:
+def get_model() -> Any:
     """
     Return the cached model instance.
 
@@ -166,6 +168,11 @@ def detect(image: np.ndarray) -> list[dict]:
             conf = float(box.conf[0])
             cls_id = int(box.cls[0])
             cls_name = model.names.get(cls_id, "unknown")
+
+            # Filter out character-level detections (e.g. individual 'A' or '7')
+            # We only want to pass the full plate crop to the OCR pipeline.
+            if cls_name.lower() not in ("plate", "plate-number", "license_plate"):
+                continue
 
             detections.append(
                 {

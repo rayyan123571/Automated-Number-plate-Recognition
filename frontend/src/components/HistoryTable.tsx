@@ -9,6 +9,7 @@
 
 import { motion, AnimatePresence } from "framer-motion";
 import { Clock, FileImage, Trash2 } from "lucide-react";
+import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -22,6 +23,11 @@ interface HistoryTableProps {
 }
 
 export function HistoryTable({ history, onClear, onSelect }: HistoryTableProps) {
+  const handleClear = () => {
+    onClear();
+    toast.success("Detection history cleared.");
+  };
+
   return (
     <Card>
       <CardHeader>
@@ -31,7 +37,7 @@ export function HistoryTable({ history, onClear, onSelect }: HistoryTableProps) 
             Detection History
           </CardTitle>
           {history.length > 0 && (
-            <Button variant="ghost" size="sm" onClick={onClear}>
+            <Button variant="ghost" size="sm" onClick={handleClear}>
               <Trash2 className="h-3.5 w-3.5" />
               Clear
             </Button>

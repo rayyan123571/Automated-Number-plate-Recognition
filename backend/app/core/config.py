@@ -51,24 +51,28 @@ class Settings(BaseSettings):
         Path(__file__).resolve().parents[2] / "models" / "best.pt"
     )
     # Confidence threshold for detections (0.0 – 1.0).
-    YOLO_CONFIDENCE_THRESHOLD: float = 0.25
+    YOLO_CONFIDENCE_THRESHOLD: float = 0.40
     # Max image dimension (pixels) — larger images are resized automatically.
-    YOLO_IMAGE_SIZE: int = 640
+    # Increased to 1280 to catch tiny plates in uploaded 720p/1080p videos
+    YOLO_IMAGE_SIZE: int = 1280
+    OCR_CONFIDENCE_FALLBACK_THRESHOLD: float = 0.50
+    TEMPORAL_SMOOTHING_FRAMES: int = 7
 
     # ── ANPR post-processing quality gates ─────────────────────────────
     # Reject OCR reads that are too weak/noisy to trust.
-    ANPR_MIN_PLATE_CHARS: int = 4
-    ANPR_MAX_PLATE_CHARS: int = 10
-    ANPR_MIN_OCR_CONFIDENCE: float = 0.15      # Lowered from 0.30 to allow blurry plates
-    ANPR_MIN_COMBINED_CONFIDENCE: float = 0.10 # Lowered from 0.20 to allow blurry plates
+    ANPR_MIN_PLATE_CHARS: int = 2
+    ANPR_MAX_PLATE_CHARS: int = 15
+    ANPR_MIN_OCR_CONFIDENCE: float = 0.05
+    ANPR_MIN_COMBINED_CONFIDENCE: float = 0.01
 
     # ── Accuracy / new features toggles ─────────────────────────────────
-    ANPR_ENABLE_DESKEW: bool = True             # Hough-line based rotation correction
-    ANPR_ENABLE_SUPER_RES: bool = True          # Up-scale small plates 2x before OCR
+    ANPR_ENABLE_DESKEW: bool = False             # Hough-line based rotation correction (Slow on CPU)
+    ANPR_ENABLE_SUPER_RES: bool = False          # Up-scale small plates 2x before OCR (Very slow on CPU)
     ANPR_ENABLE_DEDUPLICATION: bool = True      # Suppress repeat unauthorized logs
     ANPR_DEDUP_WINDOW_SECONDS: int = 30
     ANPR_FAKE_PLATE_CHECK: bool = True
     ANPR_DEBUG_SAVE_PLATES: bool = False        # Was always-on; now opt-in via env
+    EVIDENCE_STORAGE_PATH: str = "uploads/evidence"
 
     # ── Pakistan plate fuzzy match (Levenshtein distance) ───────────────
     ANPR_AUTHORIZED_FUZZY_MAX_DISTANCE: int = 1  # 0 = exact; 1 tolerates O/0, I/1

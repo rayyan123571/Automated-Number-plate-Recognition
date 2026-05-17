@@ -140,8 +140,16 @@ PATTERNS = [
     ("CIVILIAN_2", re.compile(r"^([A-Z]{1,2})[-\s]?(\d{1,4})$")),
     # Commercial Karachi short style: 7777-A
     ("COMMERCIAL_REV", re.compile(r"^(\d{3,4})[-\s]?([A-Z]{1,3})$")),
+    ("PUNJAB_SMART", re.compile(r"^[A-Z]{3}-\d{3}$")),
+    ("SINDH_SMART", re.compile(r"^[A-Z]{2}-\d{3}-\d{3}$")),
+    ("ISLAMABAD_SERIES", re.compile(r"^[A-Z]{3}-\d{4}$")),
 ]
 
+PLATE_PATTERNS = [pat for _, pat in PATTERNS]
+
+def is_valid_pakistan_plate(text: str) -> bool:
+    """Return True if text matches any registered plate pattern."""
+    return any(p.match(text.strip().upper()) for p in PLATE_PATTERNS)
 
 @dataclass
 class PlateInfo:

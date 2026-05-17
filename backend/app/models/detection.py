@@ -79,6 +79,12 @@ class Detection(Base):
         default=None,
         comment="Path to the source image (if saved to disk)",
     )
+    crop_path: str = Column(
+        String(500),
+        nullable=True,
+        default=None,
+        comment="Path to the saved plate crop image (evidence)",
+    )
     bbox: dict = Column(
         JSON,
         nullable=False,

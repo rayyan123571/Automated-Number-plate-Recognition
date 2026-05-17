@@ -7,6 +7,8 @@ echo ========================================
 cd /d "%~dp0backend"
 
 :: Define the python executable from the venv in the root directory
+:: python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+
 set PYTHON_EXE=..\.venv\Scripts\python.exe
 
 echo.

@@ -10,6 +10,48 @@ import numpy as np
 
 logger = logging.getLogger(__name__)
 
+def _run_paddleocr(image: np.ndarray) -> tuple[str, float]:
+    """
+    Run PaddleOCR on the provided image as a fallback engine.
+    
+    Args:
+        image (np.ndarray): The plate image array.
+        
+    Returns:
+        tuple[str, float]: The recognized text and its confidence score.
+        
+    Raises:
+        RuntimeError: If the paddleocr package is not installed.
+    """
+    try:
+        from paddleocr import PaddleOCR
+        import cv2
+    except ImportError as exc:
+        raise RuntimeError("PaddleOCR is not installed. Cannot use it as a fallback engine.") from exc
+
+    # PaddleOCR requires a 3-channel image. Convert if grayscale/binary.
+    if len(image.shape) == 2:
+        image = cv2.cvtColor(image, cv2.COLOR_GRAY2BGR)
+    elif len(image.shape) == 3 and image.shape[2] == 1:
+        image = cv2.cvtColor(image, cv2.COLOR_GRAY2BGR)
+
+    ocr = PaddleOCR(use_angle_cls=False, lang='en')
+    results = ocr.ocr(image)
+    
+    if not results or not results[0]:
+        return "", 0.0
+
+    best_text = ""
+    best_conf = 0.0
+    for line in results[0]:
+        _, (text, conf) = line
+        if conf > best_conf:
+            best_conf = conf
+            best_text = text
+
+    return best_text, best_conf
+
+
 # ---------------------------------------------------------------------------
 # Module-level OCR reader cache (Singleton — loaded once)
 # ---------------------------------------------------------------------------
@@ -154,6 +196,11 @@ def read_plate_text(
 
     # Clean the text
     cleaned_text = clean_plate_text(raw_text)
+
+    # Note: PaddleOCR fallback removed due to Python 3.13 C-extension incompatibility on Windows.
+    engine = "EasyOCR"
+        
+    logger.debug("OCR engine: %s | confidence: %.2f", engine, avg_confidence)
 
     logger.info(
         "OCR  |  raw='%s'  |  cleaned='%s'  |  conf=%.3f  |  "

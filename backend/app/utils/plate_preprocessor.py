@@ -103,6 +103,7 @@ def preprocess_plate(
     target_height: int = TARGET_PLATE_HEIGHT,
     debug: bool | None = None,
     plate_index: int = 0,
+    is_live: bool = False,
 ) -> dict:
     """
     Produce multiple OCR-ready variants of a plate crop.
@@ -121,8 +122,12 @@ def preprocess_plate(
     if debug is None:
         debug = settings.ANPR_DEBUG_SAVE_PLATES
 
+    # For static images (is_live=False), we want maximum quality even if it's slow.
+    do_super_res = settings.ANPR_ENABLE_SUPER_RES if is_live else True
+    do_deskew = settings.ANPR_ENABLE_DESKEW if is_live else True
+
     # Step A: Optional super-resolution for small plates
-    if settings.ANPR_ENABLE_SUPER_RES and h < SUPER_RES_MIN_HEIGHT:
+    if do_super_res and h < SUPER_RES_MIN_HEIGHT:
         plate_crop = super_resolve(plate_crop, target_height=SUPER_RES_MIN_HEIGHT * 2)
         h, w = plate_crop.shape[:2]
         logger.info("Super-resolved small plate to %dx%d", w, h)
@@ -138,7 +143,7 @@ def preprocess_plate(
     gray = cv2.cvtColor(resized, cv2.COLOR_BGR2GRAY)
 
     # Step 2.5: Optional deskew (Hough-line based)
-    if settings.ANPR_ENABLE_DESKEW:
+    if do_deskew:
         gray = deskew_plate(gray)
 
     # Step 3: Light Gaussian denoise

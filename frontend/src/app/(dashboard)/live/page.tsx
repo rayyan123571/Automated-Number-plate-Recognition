@@ -213,6 +213,7 @@ export default function LivePage() {
                     onFrame={handleFrame}
                     isCapturing={isCapturing}
                     onSourceReady={handleSourceReady}
+                    onEnded={handleStop}
                   />
 
                   {/* Bounding box overlay */}

@@ -156,7 +156,15 @@ export function LiveResultsPanel({
                   className="space-y-2"
                 >
                   <div className="flex items-center justify-between">
-                    <span className="text-2xl font-bold tracking-wider text-white font-mono">
+                    <span
+                      className={`text-3xl font-bold tracking-wider font-mono transition-colors ${
+                        plate.confidence >= 0.7
+                          ? "text-emerald-400 drop-shadow-[0_0_12px_rgba(52,211,153,0.8)]"
+                          : plate.confidence >= 0.4
+                          ? "text-amber-400 drop-shadow-[0_0_12px_rgba(251,191,36,0.8)]"
+                          : "text-red-400 drop-shadow-[0_0_12px_rgba(248,113,113,0.8)]"
+                      }`}
+                    >
                       {plate.plate_text || "—"}
                     </span>
                     <Badge

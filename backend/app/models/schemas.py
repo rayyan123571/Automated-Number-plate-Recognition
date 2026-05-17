@@ -230,6 +230,26 @@ class PlateResult(BaseModel):
 class TimingInfo(BaseModel):
     """Processing time breakdown for the ANPR pipeline."""
 
+    diagnosis_ms: float = Field(
+        default=0.0,
+        ge=0.0,
+        description="Smart image diagnosis stage time (ms)."
+    )
+    lighting_ms: float = Field(
+        default=0.0,
+        ge=0.0,
+        description="Lighting correction stage time (ms)."
+    )
+    deblur_ms: float = Field(
+        default=0.0,
+        ge=0.0,
+        description="Blur removal stage time (ms)."
+    )
+    enhance_ms: float = Field(
+        default=0.0,
+        ge=0.0,
+        description="Contrast and denoise enhancement stage time (ms)."
+    )
     detection_ms: float = Field(
         ..., ge=0.0, description="YOLOv8 detection stage time (ms)."
     )
@@ -264,6 +284,10 @@ class ANPRResponse(BaseModel):
     )
     timing: TimingInfo = Field(
         ..., description="Per-stage processing time breakdown."
+    )
+    enhancement_report: dict = Field(
+        default_factory=dict,
+        description="Image enhancement diagnostic report containing blur_score, blur_type, lighting condition, and timing breakdown."
     )
     image_width: int = Field(
         ..., ge=1, description="Width of the uploaded image (pixels)."

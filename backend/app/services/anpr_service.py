@@ -52,11 +52,18 @@ from app.services import ocr_service
 from app.services import fake_plate_detector
 from app.services.pakistan_plate_format import parse_plate
 from app.utils.plate_preprocessor import crop_plate_from_image, preprocess_plate
+from app.utils.image_diagnostics import diagnose_image
+from app.utils.image_enhancer import (
+    fix_lighting,
+    remove_blur,
+    enhance_contrast_and_denoise,
+    enhance_plate_crop
+)
 
 logger = logging.getLogger(__name__)
 
 
-def recognize(image: np.ndarray) -> dict:
+def recognize(image: np.ndarray, is_live: bool = False) -> dict:
     """
     Run the full ANPR pipeline on a single image.
 
@@ -64,6 +71,8 @@ def recognize(image: np.ndarray) -> dict:
     ----------
     image : np.ndarray
         BGR image as a NumPy array (from OpenCV / image upload).
+    is_live : bool
+        If True, restricts the number of OCR variants to prevent latency in video streams.
 
     Returns
     -------
@@ -96,6 +105,63 @@ def recognize(image: np.ndarray) -> dict:
     total_start = time.perf_counter()
     img_h, img_w = image.shape[:2]
 
+    # Initialize timing dictionary
+    timings = {}
+    enhancement_report = {}
+
+    # ─────────────────────────────────────────────────────────────────────
+    # STAGE 0: SMART IMAGE DIAGNOSIS
+    # ─────────────────────────────────────────────────────────────────────
+    t0 = time.perf_counter()
+    diagnosis_report = diagnose_image(image)
+    timings["diagnosis_ms"] = round((time.perf_counter() - t0) * 1000, 2)
+
+    # Store diagnosis info for later use
+    blur_score = diagnosis_report.get("blur_score", 0.0)
+    blur_type = diagnosis_report.get("blur_type", "none")
+    enhancement_report["blur_score"] = blur_score
+    enhancement_report["blur_type"] = blur_type
+    enhancement_report["lighting_condition"] = diagnosis_report.get("lighting_condition", "normal")
+
+    logger.info(
+        f"Image diagnosis: blur_score={blur_score:.1f}, type={blur_type}, "
+        f"lighting={diagnosis_report.get('lighting_condition', 'normal')}, "
+        f"is_blurry={diagnosis_report.get('is_blurry', False)}"
+    )
+
+    # ─────────────────────────────────────────────────────────────────────
+    # STAGE 1: CONDITION-BASED LIGHTING FIX
+    # ─────────────────────────────────────────────────────────────────────
+    t1 = time.perf_counter()
+    image = fix_lighting(image, diagnosis_report)
+    timings["lighting_ms"] = round((time.perf_counter() - t1) * 1000, 2)
+
+    # ─────────────────────────────────────────────────────────────────────
+    # STAGE 2: BLUR REMOVAL ENGINE
+    # ─────────────────────────────────────────────────────────────────────
+    t2 = time.perf_counter()
+    image = remove_blur(image, diagnosis_report)
+    timings["deblur_ms"] = round((time.perf_counter() - t2) * 1000, 2)
+
+    # ─────────────────────────────────────────────────────────────────────
+    # STAGE 3: UNIVERSAL CONTRAST AND NOISE ENHANCEMENT
+    # ─────────────────────────────────────────────────────────────────────
+    t3 = time.perf_counter()
+    image = enhance_contrast_and_denoise(image)
+    timings["enhance_ms"] = round((time.perf_counter() - t3) * 1000, 2)
+
+    # Total enhancement time before detection
+    total_pre_detection_ms = sum([
+        timings.get("diagnosis_ms", 0),
+        timings.get("lighting_ms", 0),
+        timings.get("deblur_ms", 0),
+        timings.get("enhance_ms", 0)
+    ])
+
+    logger.info(
+        f"Pre-detection enhancement pipeline complete | total_time={total_pre_detection_ms:.1f}ms"
+    )
+
     # ─────────────────────────────────────────────────────────────────────
     # Stage 1: DETECTION — find all plates in the image
     # ─────────────────────────────────────────────────────────────────────
@@ -116,9 +182,20 @@ def recognize(image: np.ndarray) -> dict:
             "plates": [],
             "num_plates": 0,
             "timing": {
+                "diagnosis_ms": timings.get("diagnosis_ms", 0),
+                "lighting_ms": timings.get("lighting_ms", 0),
+                "deblur_ms": timings.get("deblur_ms", 0),
+                "enhance_ms": timings.get("enhance_ms", 0),
                 "detection_ms": round(detection_ms, 1),
                 "ocr_ms": 0.0,
                 "total_ms": round(elapsed, 1),
+            },
+            "enhancement_report": {
+                "blur_score": blur_score,
+                "blur_type": blur_type,
+                "lighting": diagnosis_report.get("lighting_condition", "normal"),
+                "is_blurry": diagnosis_report.get("is_blurry", False),
+                "timings_ms": timings,
             },
             "image_width": img_w,
             "image_height": img_h,
@@ -131,7 +208,7 @@ def recognize(image: np.ndarray) -> dict:
     plates = []
 
     for i, det in enumerate(raw_detections):
-        plate_result = _process_single_plate(image, det, plate_index=i)
+        plate_result = _process_single_plate(image, det, plate_index=i, is_live=is_live)
         plates.append(plate_result)
 
     ocr_ms = (time.perf_counter() - ocr_start) * 1000
@@ -154,9 +231,20 @@ def recognize(image: np.ndarray) -> dict:
         "plates": plates,
         "num_plates": len(plates),
         "timing": {
+            "diagnosis_ms": timings.get("diagnosis_ms", 0),
+            "lighting_ms": timings.get("lighting_ms", 0),
+            "deblur_ms": timings.get("deblur_ms", 0),
+            "enhance_ms": timings.get("enhance_ms", 0),
             "detection_ms": round(detection_ms, 1),
             "ocr_ms": round(ocr_ms, 1),
             "total_ms": round(total_ms, 1),
+        },
+        "enhancement_report": {
+            "blur_score": blur_score,
+            "blur_type": blur_type,
+            "lighting": diagnosis_report.get("lighting_condition", "normal"),
+            "is_blurry": diagnosis_report.get("is_blurry", False),
+            "timings_ms": timings,
         },
         "image_width": img_w,
         "image_height": img_h,
@@ -167,6 +255,7 @@ def _process_single_plate(
     image: np.ndarray,
     detection: dict,
     plate_index: int,
+    is_live: bool = False,
 ) -> dict:
     """
     Process a single detected plate: crop → preprocess → OCR → clean.
@@ -192,9 +281,16 @@ def _process_single_plate(
             class_name=class_name,
         )
 
+    # ── Stage 4: Post-Crop Plate Super Enhancement (before OCR) ─────────
+    # Apply super enhancement for better OCR accuracy
+    try:
+        plate_crop = enhance_plate_crop(plate_crop)
+    except Exception as exc:
+        logger.warning("Plate %d: plate crop enhancement failed — %s", plate_index, exc)
+
     # ── Stage 3: Preprocess plate for OCR ────────────────────────────────
     try:
-        preprocessed = preprocess_plate(plate_crop, plate_index=plate_index)
+        preprocessed = preprocess_plate(plate_crop, plate_index=plate_index, is_live=is_live)
     except ValueError as exc:
         logger.warning("Plate %d: preprocessing failed — %s", plate_index, exc)
         return _build_plate_result(
@@ -208,7 +304,19 @@ def _process_single_plate(
     # Try all preprocessed variants and pick the best result.
     # Order: enhanced first, then aggressive sharpening variants, 
     # then binary variants, then gray as fallback.
-    variant_order = ("enhanced", "ultra_sharp", "laplacian", "sharp", "binary", "binary_otsu", "binary_inv", "gray")
+    
+    # Check if GPU is available to determine how many variants we can afford to run
+    import torch
+    is_gpu = torch.cuda.is_available()
+    
+    if is_gpu or not is_live:
+        # If GPU is available OR it is a static image upload (not live), run all variants.
+        variant_order = ("enhanced", "ultra_sharp", "laplacian", "sharp", "binary", "binary_otsu", "binary_inv", "gray")
+    else:
+        # On CPU + Live Video, OCR is extremely slow. Using just one highly-effective variant 
+        # (binary_otsu) to prevent massive trailing/desync of the bounding box.
+        variant_order = ("binary_otsu",)
+
     best_ocr = None
     best_variant = None
     best_score = -1.0
@@ -302,6 +410,7 @@ def _process_single_plate(
         combined_confidence=combined,
         plate_info=plate_info,
         fake_info=fake_info,
+        plate_crop=plate_crop,
     )
 
 
@@ -316,6 +425,7 @@ def _build_plate_result(
     combined_confidence: float = 0.0,
     plate_info=None,
     fake_info: dict | None = None,
+    plate_crop: np.ndarray | None = None,
 ) -> dict:
     """Build a standardized plate result dict."""
     result = {
@@ -327,6 +437,7 @@ def _build_plate_result(
         "bbox": bbox,
         "class_id": class_id,
         "class_name": class_name,
+        "plate_crop": plate_crop,
         # New Pakistan-specific fields (always present, may be null)
         "province": None,
         "city": None,
@@ -382,9 +493,20 @@ def _build_error_result(
         "plates": [],
         "num_plates": 0,
         "timing": {
+            "diagnosis_ms": 0.0,
+            "lighting_ms": 0.0,
+            "deblur_ms": 0.0,
+            "enhance_ms": 0.0,
             "detection_ms": 0.0,
             "ocr_ms": 0.0,
             "total_ms": round(elapsed, 1),
+        },
+        "enhancement_report": {
+            "blur_score": 0.0,
+            "blur_type": "none",
+            "lighting": "normal",
+            "is_blurry": False,
+            "timings_ms": {},
         },
         "image_width": img_w,
         "image_height": img_h,

@@ -194,7 +194,7 @@ async def ws_detect(websocket: WebSocket):
             # ── Run ANPR pipeline (in thread pool to avoid blocking) ─
             try:
                 result = await asyncio.get_running_loop().run_in_executor(
-                    None, anpr_service.recognize, image
+                    None, anpr_service.recognize, image, True
                 )
             except Exception as exc:
                 logger.error("ANPR pipeline error on WS frame: %s", exc)

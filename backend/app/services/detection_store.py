@@ -11,7 +11,10 @@ from __future__ import annotations
 
 import logging
 import time
+import os
+import cv2
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from typing import Optional
 
 from sqlalchemy.orm import Session
@@ -23,6 +26,10 @@ from app.models.unauthorized_log import UnauthorizedLog
 from app.services.vehicle_tracker import tracker
 
 logger = logging.getLogger(__name__)
+
+# Ensure evidence directory exists
+EVIDENCE_DIR = Path(settings.EVIDENCE_STORAGE_PATH)
+EVIDENCE_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def _levenshtein(a: str, b: str) -> int:
@@ -166,8 +173,25 @@ def save_detections(
                 )
                 plate["track_id"] = track_info.get("track_id")
                 plate["challan"] = track_info.get("challan")
+
+                # STABILITY FIX: Use majority-voted "stable_plate" for the live UI
+                if track_info.get("stable_plate"):
+                    plate["plate_text"] = track_info["stable_plate"]
+                    plate_text = track_info["stable_plate"]
             except Exception as exc:
                 logger.warning("Tracker update failed: %s", exc)
+
+            # ── Evidence Storage ────────────────────────────────────
+            crop_path = None
+            plate_crop = plate.pop("plate_crop", None)
+            if plate_crop is not None and plate_text:
+                try:
+                    filename = f"crop_{int(time.time())}_{plate.get('track_id', 'new')}_{_normalize_plate(plate_text)}.jpg"
+                    save_path = EVIDENCE_DIR / filename
+                    cv2.imwrite(str(save_path), plate_crop)
+                    crop_path = str(save_path)
+                except Exception as save_exc:
+                    logger.warning("Failed to save plate evidence: %s", save_exc)
 
             detection = Detection(
                 plate_text=plate_text,
@@ -175,6 +199,7 @@ def save_detections(
                 detection_confidence=plate.get("detection_confidence", 0.0),
                 ocr_confidence=plate.get("ocr_confidence", 0.0),
                 image_path=image_path,
+                crop_path=crop_path,
                 bbox=plate.get("bbox", {}),
                 image_width=img_w,
                 image_height=img_h,
